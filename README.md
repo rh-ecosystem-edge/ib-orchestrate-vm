@@ -17,7 +17,7 @@ make seed vdu
 ```
 - Create and push seed image
 ```
-make sno-upgrade SEED_IMAGE=$SEED_IMAGE
+make seed-image-create SEED_IMAGE=$SEED_IMAGE
 ```
 - Create recipient VM
 ```
@@ -25,7 +25,7 @@ make recipient
 ```
 - Restore seed image in recipient
 ```
-make seed-image-restore SEED_IMAGE=$SEED_IMAGE
+make sno-upgrade SEED_IMAGE=$SEED_IMAGE
 ```
 
 ## Prerequisites
@@ -142,11 +142,11 @@ make vdu
 ```
 
 ### Create a seed image using seed VM
-To restore a seed image we will use [LifeCycle Agent](https://github.com/openshift-kni/lifecycle-agent), and manage everything with the CR `SeedGenerator`
+To create a seed image we will use [LifeCycle Agent](https://github.com/openshift-kni/lifecycle-agent), and manage everything with the CR `SeedGenerator`
 
 This process will stop openshift and launch ibu-imager as a podman container, and afterwards restore the openshift cluster and update `SeedGenerator` CR
 ```bash
-make sno-upgrade SEED_IMAGE=quay.io/whatever/repo:tag
+make seed-image-create SEED_IMAGE=quay.io/whatever/repo:tag
 ```
 
 ### Create and prepare a recipient cluster
@@ -171,10 +171,17 @@ make recipient-vm-create wait-for-recipient
 make recipient-cluster-prepare
 ```
 
-### Restore seed image
-To restore a seed image we will use [LifeCycle Agent](https://github.com/openshift-kni/lifecycle-agent), and manage everything with the CR `ImageBasedUpgrade`
+### Upgrade recipient SNO with a seed image
+To upgrade the `recipient` cluster using a seed image we will use [LifeCycle Agent](https://github.com/openshift-kni/lifecycle-agent), and manage everything with the CR `ImageBasedUpgrade`
+
+This process will upgrade the `recipient` cluster using the seed image and reboot into it
 ```bash
-make seed-image-restore SEED_IMAGE=quay.io/whatever/repo:tag
+make sno-upgrade SEED_IMAGE=quay.io/whatever/repo:tag
+```
+
+To follow the logs and see what is going on in real time, we can run:
+```bash
+make lca-logs CLUSTER=seed
 ```
 
 ## Extra goodies
