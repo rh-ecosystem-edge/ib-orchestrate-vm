@@ -84,17 +84,27 @@ seed: seed-vm-create wait-for-seed seed-cluster-prepare ## Provision and prepare
 recipient: recipient-vm-create wait-for-recipient recipient-cluster-prepare ## Provision and prepare recipient VM
 
 ## Seed image management
+# make seed-image-create SEED_IMAGE=quay.io/whatever/ostmagic:seed
 .PHONY: seed-image-create
 seed-image-create: CLUSTER=$(SEED_VM_NAME)
-seed-image-create: ## Create seed image		make seed-image-create SEED_IMAGE=quay.io/whatever/ostmagic:seed
+seed-image-create: trigger-seed-image-create wait-seed-image-create ## Create seed image
+
+.PHONY: trigger-seed-image-create
+trigger-seed-image-create: CLUSTER=$(SEED_VM_NAME)
+trigger-seed-image-create:
+	@echo "Triggering seed image creation"
 	@< seedgenerator.yaml \
 		SEED_AUTH=$(shell echo '$(BACKUP_SECRET)' | base64 -w0) \
 		SEED_IMAGE=$(SEED_IMAGE) \
 		envsubst | \
 		  $(oc) apply -f -
+
+.PHONY: wait-seed-image-create
+wait-seed-image-create: CLUSTER=$(SEED_VM_NAME)
+wait-seed-image-create:
 	@echo "Waiting for seed image to be completed"; \
 	until $(oc) wait --timeout 30m seedgenerator seedimage --for=condition=SeedGenCompleted=true; do \
-		echo -n .;\
+		echo "Cluster not yet available. Trying again";\
 		sleep 15; \
 	done; echo
 
