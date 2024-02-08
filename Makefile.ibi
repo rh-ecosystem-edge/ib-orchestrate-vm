@@ -119,7 +119,7 @@ ibi-config: $(IBI_CLUSTER_CONFIG_PATH) $(IBI_CLUSTER_CONFIG_MANIFESTS)
 
 .PHONY: ibi-config.iso
 ibi-config.iso: ibi-config ## Create ibi-config.iso
-	mkisofs -o $@ -R -V "relocation-config" $(IBI_CONFIG_DIR)
+	mkisofs -o $@ -R -V "cluster-config" $(IBI_CONFIG_DIR)
 	cp $@ $(LIBVIRT_IMAGE_PATH)
 
 .PHONY: ibi-attach-config.iso
