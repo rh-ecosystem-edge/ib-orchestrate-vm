@@ -5,6 +5,8 @@ IBI_VM_MAC ?= fa:ba:da:1b:11:b1
 IBI_VM_RAM_MB ?= $(RAM_MB)
 IBI_VM_CPUS ?= 16
 IBI_DISK_SIZE ?= 120
+IBI_DISK_SIZE ?= 140
+IBI_EXTRA_PARTITION_START ?= -40G
 IBI_NET_NAME ?= $(NET_RECIPIENT_NAME)
 IBI_DOMAIN ?= $(NET_RECIPIENT_DOMAIN)
 IBI_CLUSTER_NAME ?= $(IBI_VM_NAME)
@@ -32,14 +34,16 @@ $(IB_CLI):
 .PHONY: ibi-iso
 ibi-iso: $(IB_CLI) credentials/pull-secret.json credentials/backup-secret.json ## Create ISO to be used in IBI
 	mkdir -p $(IBI_WORK_DIR)
-	$(IB_CLI) create-iso --installation-disk $(IBI_INSTALLATION_DISK) \
-    	--lca-image $(LCA_IMAGE) \
-        --seed-image $(SEED_IMAGE) \
-        --seed-version $(SEED_VERSION) \
-        --auth-file credentials/backup-secret.json \
-        --pullsecret-file credentials/pull-secret.json \
-        --ssh-public-key-file $(SSH_PUBLIC_KEY) \
-        --dir ./$(IBI_WORK_DIR)
+	$(IB_CLI) create-iso \
+		--installation-disk $(IBI_INSTALLATION_DISK) \
+		--extra-partition-start $(IBI_EXTRA_PARTITION_START) \
+		--lca-image $(LCA_IMAGE) \
+		--seed-image $(SEED_IMAGE) \
+		--seed-version $(SEED_VERSION) \
+		--auth-file credentials/backup-secret.json \
+		--pullsecret-file credentials/pull-secret.json \
+		--ssh-public-key-file $(SSH_PUBLIC_KEY) \
+		--dir ./$(IBI_WORK_DIR)
 	sudo cp ./$(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
 	sudo chmod a+r "$(IBI_RHCOS_ISO_PATH)"
 

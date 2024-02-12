@@ -171,7 +171,7 @@ seed-lifecycle-agent-deploy: CLUSTER=$(SEED_VM_NAME)
 seed-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: seed-cluster-prepare
-seed-cluster-prepare: seed-varlibcontainers seed-lifecycle-agent-deploy ## Prepare seed VM cluster
+seed-cluster-prepare: seed-lifecycle-agent-deploy ## Prepare seed VM cluster
 
 generate-dnsmasq-site-policy-section.sh:
 	curl -sOL https://raw.githubusercontent.com/openshift-kni/lifecycle-agent/main/hack/generate-dnsmasq-site-policy-section.sh
@@ -181,10 +181,6 @@ generate-dnsmasq-site-policy-section.sh:
 # dnsmasq workaround until https://github.com/openshift/assisted-service/pull/5658 is in assisted
 dnsmasq-workaround: generate-dnsmasq-site-policy-section.sh
 	./generate-dnsmasq-site-policy-section.sh --name $(SEED_VM_NAME) --domain $(NET_SEED_DOMAIN) --ip $(SEED_VM_IP) --mc | $(oc) apply -f -
-
-.PHONY: seed-varlibcontainers
-seed-varlibcontainers: CLUSTER=$(SEED_VM_NAME)
-seed-varlibcontainers: shared-varlibcontainers
 
 .PHONY: vdu
 vdu: ## Apply VDU profile to seed VM
@@ -236,11 +232,7 @@ recipient-lifecycle-agent-deploy: CLUSTER=$(RECIPIENT_VM_NAME)
 recipient-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: recipient-cluster-prepare
-recipient-cluster-prepare: recipient-varlibcontainers oadp-deploy recipient-lifecycle-agent-deploy ## Prepare recipient VM cluster
-
-.PHONY: recipient-varlibcontainers
-recipient-varlibcontainers: CLUSTER=$(RECIPIENT_VM_NAME)
-recipient-varlibcontainers: shared-varlibcontainers
+recipient-cluster-prepare: oadp-deploy recipient-lifecycle-agent-deploy ## Prepare recipient VM cluster
 
 .PHONY: oadp-deploy
 oadp-deploy: CLUSTER=$(RECIPIENT_VM_NAME)
@@ -259,6 +251,7 @@ lca-logs: ## Tail through LifeCycle Agent logs	make lca-logs CLUSTER=seed
 	$(oc) logs -f -c manager -n openshift-lifecycle-agent -l app.kubernetes.io/component=lifecycle-agent
 
 start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
+	cp 98_varlibcontainers_as_partition.yaml $(SNO_DIR)/manifests
 	@< $(AGENT_CONFIG_TEMPLATE) \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
@@ -281,6 +274,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
 		NET_UUID=$(NET_UUID) \
 		NET_MAC=$(NET_MAC)
+	rm $(SNO_DIR)/manifests/98_varlibcontainers_as_partition.yaml
 
 # Network used for the seed VM
 seed-network: NET_NAME=$(NET_SEED_NAME)
