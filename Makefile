@@ -253,7 +253,7 @@ lca-logs: CLUSTER=$(RECIPIENT_VM_NAME)
 lca-logs: ## Tail through LifeCycle Agent logs	make lca-logs CLUSTER=seed
 	$(oc) logs -f -c manager -n openshift-lifecycle-agent -l app.kubernetes.io/component=lifecycle-agent
 
-start-iso-abi: checkenv bip-orchestrate-vm
+start-iso-abi: checkenv bip-orchestrate-vm check-old-net
 	@< agent-config-template.yaml \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
@@ -301,7 +301,7 @@ network_recipient: MAC_ADDRESS=$(RECIPIENT_MAC)
 network_recipient: network
 
 # Call network creation in bip-orchestrate-vm repo
-network:
+network: check-old-net
 	make -C $(SNO_DIR) $@ \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
@@ -421,8 +421,27 @@ vm-recert:
 .PHONY: vm-remove
 vm-remove:
 	echo "Destroying and unregistering $(VM_NAME)"
-	$(virsh) destroy $(VM_NAME)
-	$(virsh) undefine $(VM_NAME) --remove-all-storage
+	-$(virsh) destroy $(VM_NAME)
+	-$(virsh) undefine $(VM_NAME) --remove-all-storage
+
+# Delete check-old-net and clean-old-net targets after some time, when everyone has already switched to the new networks
+.PHONY: check-old-net
+check-old-net:
+	@if sudo virsh net-dumpxml test-net 2> /dev/null | grep -q "<uuid>a29bce40-ce15-43c8-9142-fd0a3cc37f9a</uuid>"; then \
+		echo ERROR; \
+		echo Old test-net network found; \
+		echo; \
+		echo In order to work with the new network names you need to delete the existing VMs attached to that network, and then the network:; \
+		echo You can do this by running; \
+		echo "   make clean-old-net"; \
+		echo; \
+		echo; \
+		false; \
+	fi
+
+.PHONY: clean-old-net
+clean-old-net: seed-vm-remove recipient-vm-remove
+	make -C $(SNO_DIR) destroy-libvirt-net NET_NAME=test-net
 
 .PHONY: help
 help:
