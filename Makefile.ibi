@@ -10,7 +10,6 @@ IBI_HOSTNAME ?= $(IBI_VM_NAME)
 IBI_INSTALLATION_DISK ?= /dev/vda
 IBI_WORK_DIR ?= ibi-iso-work-dir
 
-LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:4.14.0
 COREOS_INSTALLER = quay.io/coreos/coreos-installer:latest
 IB_CLI = ./bin/ib-cli
 RHCOS_LIVE_ISO = $(IBI_WORK_DIR)/rhcos-live.x86_64.iso

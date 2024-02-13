@@ -341,7 +341,9 @@ credentials/pull-secret.json:
 
 .PHONY: lifecycle-agent-deploy
 lifecycle-agent-deploy: lifecycle-agent
-	KUBECONFIG=../$(SNO_KUBECONFIG) make -C lifecycle-agent install deploy
+	KUBECONFIG=../$(SNO_KUBECONFIG) \
+	IMG=$(LCA_IMAGE) \
+		make -C lifecycle-agent install deploy
 	@echo "Waiting for deployment lifecycle-agent-controller-manager to be available"; \
 	until $(oc) wait deployment -n openshift-lifecycle-agent lifecycle-agent-controller-manager --for=condition=available=true; do \
 		echo -n .;\
