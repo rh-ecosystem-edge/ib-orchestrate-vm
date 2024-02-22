@@ -6,6 +6,7 @@
   "node_ip": "${NODE_IP}",
   "release_registry": "quay.io",
   "hostname": "${HOSTNAME}",
+  "pull_secret": ${PULL_SECRET},
   "KubeconfigCryptoRetention": {
     "KubeAPICrypto": {
       "ServingCrypto": {

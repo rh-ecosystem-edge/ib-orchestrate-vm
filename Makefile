@@ -159,7 +159,7 @@ seed-vm-recert: vm-recert ## Run recert to extend certificates in seed VM
 
 .PHONY: seed-vm-remove
 seed-vm-remove: VM_NAME=$(SEED_VM_NAME)
-seed-vm-remove: vm-remove ## Remove the recipient VM and the storage associated with it
+seed-vm-remove: vm-remove ## Remove the seed VM and the storage associated with it
 
 .PHONY: seed-lifecycle-agent-deploy
 seed-lifecycle-agent-deploy: CLUSTER=$(SEED_VM_NAME)
