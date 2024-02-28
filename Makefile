@@ -253,12 +253,12 @@ lca-logs: CLUSTER=$(RECIPIENT_VM_NAME)
 lca-logs: ## Tail through LifeCycle Agent logs	make lca-logs CLUSTER=seed
 	$(oc) logs -f -c manager -n openshift-lifecycle-agent -l app.kubernetes.io/component=lifecycle-agent
 
-start-iso-abi: checkenv bip-orchestrate-vm check-old-net
+start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 	@< agent-config-template.yaml \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
 		HOST_MAC=$(MAC_ADDRESS) \
-		HOST_ROUTE=$(shell virsh net-dumpxml ib-orchestrate-0|grep '<ip '|xargs -n1|grep address | cut -d = -f 2) \
+		HOST_ROUTE=$(shell virsh net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
 		envsubst > $(SNO_DIR)/agent-config.yaml
 	make -C $(SNO_DIR) $@ \
 		VM_NAME=$(VM_NAME) \
@@ -266,7 +266,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net
 		MACHINE_NETWORK=$(MACHINE_NETWORK) \
 		CLUSTER_NAME=$(VM_NAME) \
 		HOST_MAC=$(MAC_ADDRESS) \
-		INSTALLER_WORKDIR=workdir-$(VM_NAME)\
+		INSTALLER_WORKDIR=workdir-$(VM_NAME) \
 		RELEASE_VERSION=$(RELEASE_VERSION) \
 		CPU_CORE=$(CPU_CORE) \
 		RELEASE_ARCH=$(RELEASE_ARCH) \
