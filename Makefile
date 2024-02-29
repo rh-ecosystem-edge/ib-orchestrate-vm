@@ -278,47 +278,32 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		NET_MAC=$(NET_MAC)
 
 # Network used for the seed VM
-network_seed: BASE_DOMAIN=$(NET_SEED_DOMAIN)
-network_seed: NET_NAME=$(NET_SEED_NAME)
-network_seed: NET_BRIDGE_NAME=$(NET_SEED_BRIDGE_NAME)
-network_seed: NET_MAC=$(NET_SEED_MAC)
-network_seed: NET_UUID=$(NET_SEED_UUID)
-network_seed: MACHINE_NETWORK=$(NET_SEED_NETWORK)
-network_seed: VM_NAME=$(SEED_VM_NAME)
-network_seed: HOST_IP=$(SEED_VM_IP)
-network_seed: MAC_ADDRESS=$(SEED_MAC)
-network_seed: network
+seed-network: NET_NAME=$(NET_SEED_NAME)
+seed-network: NET_UUID=$(NET_SEED_UUID)
+seed-network: NET_BRIDGE_NAME=$(NET_SEED_BRIDGE_NAME)
+seed-network: NET_MAC=$(NET_SEED_MAC)
+seed-network: MACHINE_NETWORK=$(NET_SEED_NETWORK)
+seed-network: BASE_DOMAIN=$(NET_SEED_DOMAIN)
+seed-network: network
 
 # Network used for the recipients (recipient and ibi)
-network_recipient: BASE_DOMAIN=$(NET_RECIPIENT_DOMAIN)
-network_recipient: NET_NAME=$(NET_RECIPIENT_NAME)
-network_recipient: NET_BRIDGE_NAME=$(NET_RECIPIENT_BRIDGE_NAME)
-network_recipient: NET_MAC=$(NET_RECIPIENT_MAC)
-network_recipient: NET_UUID=$(NET_RECIPIENT_UUID)
-network_recipient: MACHINE_NETWORK=$(NET_RECIPIENT_NETWORK)
-network_recipient: VM_NAME=$(RECIPIENT_VM_NAME)
-network_recipient: HOST_IP=$(RECIPIENT_VM_IP)
-network_recipient: MAC_ADDRESS=$(RECIPIENT_MAC)
-network_recipient: network
+recipient-network: NET_NAME=$(NET_RECIPIENT_NAME)
+recipient-network: NET_UUID=$(NET_RECIPIENT_UUID)
+recipient-network: NET_BRIDGE_NAME=$(NET_RECIPIENT_BRIDGE_NAME)
+recipient-network: NET_MAC=$(NET_RECIPIENT_MAC)
+recipient-network: MACHINE_NETWORK=$(NET_RECIPIENT_NETWORK)
+recipient-network: BASE_DOMAIN=$(NET_RECIPIENT_DOMAIN)
+recipient-network: network
 
 # Call network creation in bip-orchestrate-vm repo
 network: check-old-net
 	make -C $(SNO_DIR) $@ \
-		VM_NAME=$(VM_NAME) \
-		HOST_IP=$(HOST_IP) \
-		MACHINE_NETWORK=$(MACHINE_NETWORK) \
-		CLUSTER_NAME=$(VM_NAME) \
-		HOST_MAC=$(MAC_ADDRESS) \
-		INSTALLER_WORKDIR=workdir-$(VM_NAME)\
-		RELEASE_VERSION=$(RELEASE_VERSION) \
-		CPU_CORE=$(CPU_CORE) \
-		RELEASE_ARCH=$(RELEASE_ARCH) \
-		RAM_MB=$(RAM_MB) \
-		BASE_DOMAIN=$(BASE_DOMAIN) \
 		NET_NAME=$(NET_NAME) \
-		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
 		NET_UUID=$(NET_UUID) \
-		NET_MAC=$(NET_MAC)
+		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
+		NET_MAC=$(NET_MAC) \
+		MACHINE_NETWORK=$(MACHINE_NETWORK) \
+		BASE_DOMAIN=$(BASE_DOMAIN)
 
 .PHONY: wait-for-install-complete
 wait-for-install-complete:
@@ -445,6 +430,20 @@ check-old-net:
 .PHONY: clean-old-net
 clean-old-net: seed-vm-remove recipient-vm-remove
 	make -C $(SNO_DIR) destroy-libvirt-net NET_NAME=test-net
+
+.PHONY: clean-libvirt
+clean-libvirt:
+	-for host in $(SEED_VM_NAME) $(RECIPIENT_VM_NAME) $(IBI_VM_NAME); do \
+		$(virsh) destroy $$host; \
+		$(virsh) undefine --remove-all-storage $$host; \
+	done
+	-for net in test-net $(NET_SEED_NAME) $(NET_RECIPIENT_NAME); do \
+		make -C $(SNO_DIR) destroy-libvirt-net NET_NAME=$$net; \
+	done
+
+.PHONY: clean-all
+clean-all: clean-libvirt
+	-rm -fr $(SNO_DIR) lifecycle-agent ibi-iso-work-dir bin ibi-certs kubeconfig.ibi credentials
 
 .PHONY: help
 help:

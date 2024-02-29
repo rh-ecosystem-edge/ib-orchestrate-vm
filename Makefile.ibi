@@ -59,7 +59,7 @@ host-net-config:
 	$(SNO_DIR)/host-net-config.sh
 
 .PHONY: ibi-vm
-ibi-vm: network_recipient host-net-config ## Provision IBI VM
+ibi-vm: recipient-network host-net-config ## Provision IBI VM
 	RHCOS_ISO=$(IBI_RHCOS_ISO_PATH) \
 	VM_NAME=$(IBI_VM_NAME) \
 	NET_NAME=$(IBI_NET_NAME) \
