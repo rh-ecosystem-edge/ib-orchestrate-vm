@@ -14,16 +14,16 @@ hosts:
           type: ethernet
           state: up
           mac-address: ${HOST_MAC}
-          ipv4:
+          ${NET_TYPE}:
             enabled: true
             address:
               - ip: ${HOST_IP}
-                prefix-length: 24
+                prefix-length: ${NET_PREFIX}
       routes:
         config:
         - next-hop-address: ${HOST_ROUTE}
           next-hop-interface: eno1
-          destination: 0.0.0.0/0
+          destination: ${NET_DEFAULTROUTE}
       dns-resolver:
         config:
           server:

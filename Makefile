@@ -28,15 +28,25 @@ virsh = sudo virsh --connect=$(VIRSH_CONNECT)
 
 SEED_VM_NAME  ?= seed
 SEED_DOMAIN ?= $(NET_SEED_DOMAIN)
-SEED_VM_IP  ?= 192.168.126.10
 SEED_VERSION ?= 4.15.2
 SEED_MAC ?= 52:54:00:ee:42:e1
 
+ifdef IPV6
+	SEED_VM_IP  ?= fdfa:bada:faba:da::10
+else
+	SEED_VM_IP  ?= 192.168.126.10
+endif
+
 RECIPIENT_VM_NAME ?= recipient
 RECIPIENT_DOMAIN ?= $(NET_RECIPIENT_DOMAIN)
-RECIPIENT_VM_IP  ?= 192.168.127.99
 RECIPIENT_VERSION ?= 4.14.14
 RECIPIENT_MAC ?= 52:54:00:fa:ba:da
+
+ifdef IPV6
+	RECIPIENT_VM_IP  ?= fdfa:bada:faba:db::99
+else
+	RECIPIENT_VM_IP  ?= 192.168.127.99
+endif
 
 UPGRADE_TIMEOUT ?= 30m
 
@@ -140,6 +150,7 @@ seed-vm-create: RELEASE_VERSION=$(SEED_VERSION)
 seed-vm-create: MAC_ADDRESS=$(SEED_MAC)
 seed-vm-create: BASE_DOMAIN=$(SEED_DOMAIN)
 seed-vm-create: NET_NAME=$(NET_SEED_NAME)
+seed-vm-create: NET_TYPE=$(NET_SEED_TYPE)
 seed-vm-create: NET_BRIDGE_NAME=$(NET_SEED_BRIDGE_NAME)
 seed-vm-create: NET_MAC=$(NET_SEED_MAC)
 seed-vm-create: NET_UUID=$(NET_SEED_UUID)
@@ -206,6 +217,7 @@ recipient-vm-create: RELEASE_VERSION=$(RECIPIENT_VERSION)
 recipient-vm-create: MAC_ADDRESS=$(RECIPIENT_MAC)
 recipient-vm-create: BASE_DOMAIN=$(RECIPIENT_DOMAIN)
 recipient-vm-create: NET_NAME=$(NET_RECIPIENT_NAME)
+recipient-vm-create: NET_TYPE=$(NET_RECIPIENT_TYPE)
 recipient-vm-create: NET_BRIDGE_NAME=$(NET_RECIPIENT_BRIDGE_NAME)
 recipient-vm-create: NET_MAC=$(NET_RECIPIENT_MAC)
 recipient-vm-create: NET_UUID=$(NET_RECIPIENT_UUID)
@@ -273,7 +285,10 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
 		HOST_MAC=$(MAC_ADDRESS) \
+		NET_TYPE=$(NET_TYPE) \
 		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
+		NET_PREFIX=$(shell $(virsh) net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep prefix | cut -d = -f 2 | tr -d '>') \
+		NET_DEFAULTROUTE=$(shell $(virsh) net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | grep -q : && echo ::/0 || echo 0.0.0.0/0) \
 		envsubst > $(shell pwd)/agent-config-$(VM_NAME).yaml
 	make -C $(SNO_DIR) $@ \
 		VM_NAME=$(VM_NAME) \
@@ -290,6 +305,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		RAM_MB=$(RAM_MB) \
 		BASE_DOMAIN=$(BASE_DOMAIN) \
 		NET_NAME=$(NET_NAME) \
+		NET_TYPE=$(NET_TYPE) \
 		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
 		NET_UUID=$(NET_UUID) \
 		NET_MAC=$(NET_MAC)
@@ -298,6 +314,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 	fi
 
 # Network used for the seed VM
+seed-network: NET_TYPE=$(NET_SEED_TYPE)
 seed-network: NET_NAME=$(NET_SEED_NAME)
 seed-network: NET_UUID=$(NET_SEED_UUID)
 seed-network: NET_BRIDGE_NAME=$(NET_SEED_BRIDGE_NAME)
@@ -307,6 +324,7 @@ seed-network: BASE_DOMAIN=$(NET_SEED_DOMAIN)
 seed-network: network
 
 # Network used for the recipients (recipient and ibi)
+recipient-network: NET_TYPE=$(NET_RECIPIENT_TYPE)
 recipient-network: NET_NAME=$(NET_RECIPIENT_NAME)
 recipient-network: NET_UUID=$(NET_RECIPIENT_UUID)
 recipient-network: NET_BRIDGE_NAME=$(NET_RECIPIENT_BRIDGE_NAME)
@@ -318,6 +336,7 @@ recipient-network: network
 # Call network creation in bip-orchestrate-vm repo
 network: check-old-net
 	make -C $(SNO_DIR) $@ \
+		NET_TYPE=$(NET_TYPE) \
 		NET_NAME=$(NET_NAME) \
 		NET_UUID=$(NET_UUID) \
 		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
