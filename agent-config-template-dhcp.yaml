@@ -1,0 +1,10 @@
+apiVersion: v1alpha1
+kind: AgentConfig
+metadata:
+  name: ${VM_NAME}-sno-cluster
+rendezvousIP: ${HOST_IP}
+hosts:
+  - hostname: ${VM_NAME}
+    interfaces:
+      - name: eno1
+        macAddress: ${HOST_MAC}

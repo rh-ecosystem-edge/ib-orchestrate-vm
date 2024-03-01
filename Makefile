@@ -15,6 +15,11 @@ ifndef PULL_SECRET
 	$(error PULL_SECRET must be defined)
 endif
 
+AGENT_CONFIG_TEMPLATE = agent-config-template.yaml
+ifdef DHCP
+    AGENT_CONFIG_TEMPLATE = agent-config-template-dhcp.yaml
+endif
+
 VIRSH_CONNECT ?= qemu:///system
 virsh = virsh --connect=$(VIRSH_CONNECT)
 
@@ -254,7 +259,7 @@ lca-logs: ## Tail through LifeCycle Agent logs	make lca-logs CLUSTER=seed
 	$(oc) logs -f -c manager -n openshift-lifecycle-agent -l app.kubernetes.io/component=lifecycle-agent
 
 start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
-	@< agent-config-template.yaml \
+	@< $(AGENT_CONFIG_TEMPLATE) \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
 		HOST_MAC=$(MAC_ADDRESS) \
