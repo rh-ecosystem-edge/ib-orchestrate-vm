@@ -246,3 +246,7 @@ It is important to note that for precaching to work, this change must be applied
 make seed-image-restore SNO_KUBECONFIG=path/to/recipient/sno/kubeconfig SEED_IMAGE=$SEED_IMAGE
 ```
 - Reboot the recipient host
+
+## Extras
+
+- Set `DHCP` environment variable in order to run with dhcp, default is static ip 
