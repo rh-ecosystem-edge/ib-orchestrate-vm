@@ -21,7 +21,7 @@ ifdef DHCP
 endif
 
 VIRSH_CONNECT ?= qemu:///system
-virsh = virsh --connect=$(VIRSH_CONNECT)
+virsh = sudo virsh --connect=$(VIRSH_CONNECT)
 
 SEED_VM_NAME  ?= seed
 SEED_DOMAIN ?= $(NET_SEED_DOMAIN)
@@ -263,7 +263,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
 		HOST_MAC=$(MAC_ADDRESS) \
-		HOST_ROUTE=$(shell virsh net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
+		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
 		envsubst > $(SNO_DIR)/agent-config.yaml
 	make -C $(SNO_DIR) $@ \
 		VM_NAME=$(VM_NAME) \
@@ -420,7 +420,7 @@ vm-remove:
 # Delete check-old-net and clean-old-net targets after some time, when everyone has already switched to the new networks
 .PHONY: check-old-net
 check-old-net:
-	@if sudo virsh net-dumpxml test-net 2> /dev/null | grep -q "<uuid>a29bce40-ce15-43c8-9142-fd0a3cc37f9a</uuid>"; then \
+	@if $(virsh) net-dumpxml test-net 2> /dev/null | grep -q "<uuid>a29bce40-ce15-43c8-9142-fd0a3cc37f9a</uuid>"; then \
 		echo ERROR; \
 		echo Old test-net network found; \
 		echo; \
