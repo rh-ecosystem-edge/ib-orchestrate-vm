@@ -271,13 +271,14 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		HOST_IP=$(HOST_IP) \
 		HOST_MAC=$(MAC_ADDRESS) \
 		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
-		envsubst > $(SNO_DIR)/agent-config.yaml
+		envsubst > $(shell pwd)/agent-config-$(VM_NAME).yaml
 	make -C $(SNO_DIR) $@ \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
 		MACHINE_NETWORK=$(MACHINE_NETWORK) \
 		CLUSTER_NAME=$(VM_NAME) \
 		HOST_MAC=$(MAC_ADDRESS) \
+		AGENT_CONFIG=$(shell pwd)/agent-config-$(VM_NAME).yaml \
 		INSTALLER_WORKDIR=workdir-$(VM_NAME) \
 		RELEASE_VERSION=$(RELEASE_VERSION) \
 		CPU_CORE=$(CPU_CORE) \
