@@ -18,7 +18,7 @@ spec:
         - device: /dev/vda
           partitions:
             - label: varlibcontainers
-              startMiB: 80000 # space left for the CoreOS partition.
+              startMiB: 100000 # space left for the CoreOS partition.
               sizeMiB: 0 # Use all available space
       filesystems:
         - device: /dev/disk/by-partlabel/varlibcontainers
