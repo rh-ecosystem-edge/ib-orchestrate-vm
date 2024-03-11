@@ -4,6 +4,9 @@ MAKEFLAGS += --no-builtin-rules
 IMAGE_BASED_DIR = .
 SNO_DIR = ./bip-orchestrate-vm
 
+# Define precache mode (partition or directory)
+PRECACHE_MODE ?= partition
+
 -include .config-override
 include network.env
 
@@ -26,7 +29,7 @@ virsh = sudo virsh --connect=$(VIRSH_CONNECT)
 SEED_VM_NAME  ?= seed
 SEED_DOMAIN ?= $(NET_SEED_DOMAIN)
 SEED_VM_IP  ?= 192.168.126.10
-SEED_VERSION ?= 4.15.0
+SEED_VERSION ?= 4.15.2
 SEED_MAC ?= 52:54:00:ee:42:e1
 
 RECIPIENT_VM_NAME ?= recipient
@@ -41,6 +44,7 @@ LIBVIRT_IMAGE_PATH := $(or ${LIBVIRT_IMAGE_PATH},/var/lib/libvirt/images)
 
 CPU_CORE ?= 16
 RAM_MB ?= 32768
+DISK_GB ?= 140
 LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:latest
 RELEASE_ARCH ?= x86_64
 
@@ -171,7 +175,11 @@ seed-lifecycle-agent-deploy: CLUSTER=$(SEED_VM_NAME)
 seed-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: seed-cluster-prepare
-seed-cluster-prepare: seed-varlibcontainers seed-lifecycle-agent-deploy ## Prepare seed VM cluster
+seed-cluster-prepare: seed-directory-varlibcontainers seed-lifecycle-agent-deploy ## Prepare seed VM cluster
+
+.PHONY: seed-directory-varlibcontainers
+seed-directory-varlibcontainers: CLUSTER=$(SEED_VM_NAME)
+seed-directory-varlibcontainers: directory-varlibcontainers
 
 generate-dnsmasq-site-policy-section.sh:
 	curl -sOL https://raw.githubusercontent.com/openshift-kni/lifecycle-agent/main/hack/generate-dnsmasq-site-policy-section.sh
@@ -181,10 +189,6 @@ generate-dnsmasq-site-policy-section.sh:
 # dnsmasq workaround until https://github.com/openshift/assisted-service/pull/5658 is in assisted
 dnsmasq-workaround: generate-dnsmasq-site-policy-section.sh
 	./generate-dnsmasq-site-policy-section.sh --name $(SEED_VM_NAME) --domain $(NET_SEED_DOMAIN) --ip $(SEED_VM_IP) --mc | $(oc) apply -f -
-
-.PHONY: seed-varlibcontainers
-seed-varlibcontainers: CLUSTER=$(SEED_VM_NAME)
-seed-varlibcontainers: shared-varlibcontainers
 
 .PHONY: vdu
 vdu: ## Apply VDU profile to seed VM
@@ -236,11 +240,11 @@ recipient-lifecycle-agent-deploy: CLUSTER=$(RECIPIENT_VM_NAME)
 recipient-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: recipient-cluster-prepare
-recipient-cluster-prepare: recipient-varlibcontainers oadp-deploy recipient-lifecycle-agent-deploy ## Prepare recipient VM cluster
+recipient-cluster-prepare: recipient-directory-varlibcontainers oadp-deploy recipient-lifecycle-agent-deploy ## Prepare recipient VM cluster
 
-.PHONY: recipient-varlibcontainers
-recipient-varlibcontainers: CLUSTER=$(RECIPIENT_VM_NAME)
-recipient-varlibcontainers: shared-varlibcontainers
+.PHONY: recipient-directory-varlibcontainers
+recipient-directory-varlibcontainers: CLUSTER=$(RECIPIENT_VM_NAME)
+recipient-directory-varlibcontainers: directory-varlibcontainers
 
 .PHONY: oadp-deploy
 oadp-deploy: CLUSTER=$(RECIPIENT_VM_NAME)
@@ -259,6 +263,9 @@ lca-logs: ## Tail through LifeCycle Agent logs	make lca-logs CLUSTER=seed
 	$(oc) logs -f -c manager -n openshift-lifecycle-agent -l app.kubernetes.io/component=lifecycle-agent
 
 start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
+	if [[ "$(PRECACHE_MODE)" == "partition" ]]; then \
+		cp 98_varlibcontainers_as_partition.yaml $(SNO_DIR)/manifests; \
+	fi
 	@< $(AGENT_CONFIG_TEMPLATE) \
 		VM_NAME=$(VM_NAME) \
 		HOST_IP=$(HOST_IP) \
@@ -274,6 +281,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		INSTALLER_WORKDIR=workdir-$(VM_NAME) \
 		RELEASE_VERSION=$(RELEASE_VERSION) \
 		CPU_CORE=$(CPU_CORE) \
+		DISK_GB=$(DISK_GB) \
 		RELEASE_ARCH=$(RELEASE_ARCH) \
 		RAM_MB=$(RAM_MB) \
 		BASE_DOMAIN=$(BASE_DOMAIN) \
@@ -281,6 +289,9 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
 		NET_UUID=$(NET_UUID) \
 		NET_MAC=$(NET_MAC)
+	if [[ "$(PRECACHE_MODE)" == "partition" ]]; then \
+		rm $(SNO_DIR)/manifests/98_varlibcontainers_as_partition.yaml; \
+	fi
 
 # Network used for the seed VM
 seed-network: NET_NAME=$(NET_SEED_NAME)
@@ -373,15 +384,17 @@ lca-wait-for-upgrade:
 ssh: $(SSH_KEY_PRIV_PATH)
 	ssh $(SSH_FLAGS) $(SSH_HOST)
 
-.PHONY: shared-varlibcontainers
-shared-varlibcontainers:
-	$(oc) apply -f ostree-var-lib-containers-machineconfig.yaml
-	@echo "Waiting for 98-var-lib-containers to be present in running rendered-master MachineConfig"; \
-	until $(oc) get mcp master -ojson | jq -r .status.configuration.source[].name | grep -xq 98-var-lib-containers; do \
-		echo -n .;\
-		sleep 30; \
-	done; echo
-	$(oc) wait --timeout=20m --for=condition=updated=true mcp master
+.PHONY: directory-varlibcontainers
+directory-varlibcontainers:
+	if [[ "$(PRECACHE_MODE)" == "directory" ]]; then \
+		$(oc) apply -f ostree-var-lib-containers-machineconfig.yaml; \
+		echo "Waiting for 98-var-lib-containers to be present in running rendered-master MachineConfig"; \
+		until $(oc) get mcp master -ojson | jq -r .status.configuration.source[].name | grep -xq 98-var-lib-containers; do \
+			echo -n .;\
+			sleep 30; \
+		done; echo; \
+		$(oc) wait --timeout=20m --for=condition=updated=true mcp master; \
+	fi
 
 .PHONY: vm-backup
 vm-backup:
@@ -389,14 +402,14 @@ vm-backup:
 	ssh $(SSH_FLAGS) core@$(VM_NAME) sudo /var/tmp/recert_script.sh backup
 	$(virsh) shutdown $(VM_NAME)
 	@until $(virsh) domstate $(VM_NAME) | grep -qx 'shut off' ; do echo -n . ; sleep 5; done; echo
-	sudo cp "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME).qcow2" "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME)-$(VERSION)-backup.qcow2"
+	sudo cp "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME).qcow2" "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME)-$(VERSION)-$(PRECACHE_MODE)-backup.qcow2"
 	$(virsh) start $(VM_NAME)
 
 .PHONY: vm-restore
 vm-restore:
 	-$(virsh) destroy $(VM_NAME)
 	@until $(virsh) domstate $(VM_NAME) | grep -qx 'shut off' ; do echo -n . ; sleep 5; done; echo
-	sudo cp "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME)-$(VERSION)-backup.qcow2" "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME).qcow2"
+	sudo cp "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME)-$(VERSION)-$(PRECACHE_MODE)-backup.qcow2" "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME).qcow2"
 	$(virsh) start $(VM_NAME)
 
 .PHONY: vm-recert

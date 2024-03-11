@@ -1,0 +1,48 @@
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  labels:
+    machineconfiguration.openshift.io/role: master
+  name: 98-var-lib-containers
+spec:
+  config:
+    ignition:
+      version: 3.2.0
+    storage:
+      files:
+      - contents:
+          source: data:text/plain;charset=utf-8;base64,W2NyaW9dCmNsZWFuX3NodXRkb3duX2ZpbGUgPSAiIgo=
+        mode: 420
+        path: /etc/crio/crio.conf.d/99-crio-disable-wipe.toml
+      disks:
+        - device: /dev/vda
+          partitions:
+            - label: varlibcontainers
+              startMiB: 100000 # space left for the CoreOS partition.
+              sizeMiB: 0 # Use all available space
+      filesystems:
+        - device: /dev/disk/by-partlabel/varlibcontainers
+          format: xfs
+          mountOptions:
+            - defaults
+            - prjquota
+          path: /var/lib/containers
+          wipeFilesystem: true
+    systemd:
+      units:
+        - contents: |-
+            [Unit]
+            Before=local-fs.target
+            Requires=systemd-fsck@dev-disk-by\x2dpartlabel-varlibcontainers.service
+            After=systemd-fsck@dev-disk-by\x2dpartlabel-varlibcontainers.service
+
+            [Mount]
+            Where=/var/lib/containers
+            What=/dev/disk/by-partlabel/varlibcontainers
+            Type=xfs
+            Options=defaults,prjquota
+
+            [Install]
+            RequiredBy=local-fs.target
+          enabled: true
+          name: var-lib-containers.mount
