@@ -19,3 +19,5 @@ kubeconfig.ibi
 ibi-ignition.json
 ibi-iso-work-dir/
 bin/
+agent-config-seed.yaml
+agent-config-recipient.yaml
