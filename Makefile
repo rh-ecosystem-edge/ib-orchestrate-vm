@@ -46,6 +46,8 @@ CPU_CORE ?= 16
 RAM_MB ?= 32768
 DISK_GB ?= 140
 LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:latest
+LCA_GIT_REPO ?= https://github.com/openshift-kni/lifecycle-agent
+LCA_GIT_BRANCH ?= main
 RELEASE_ARCH ?= x86_64
 
 SSH_KEY_DIR = $(SNO_DIR)/ssh-key
@@ -89,7 +91,7 @@ lifecycle-agent:
 	@if [ -d $@ ]; then \
 		git -C $@ pull ;\
 	else \
-		git clone https://github.com/openshift-kni/lifecycle-agent ;\
+		git clone $(LCA_GIT_REPO) --branch $(LCA_GIT_BRANCH) lifecycle-agent;\
 	fi
 
 ## VM provision in a single step
