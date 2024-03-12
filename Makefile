@@ -183,8 +183,9 @@ seed-cluster-prepare: seed-directory-varlibcontainers seed-lifecycle-agent-deplo
 seed-directory-varlibcontainers: CLUSTER=$(SEED_VM_NAME)
 seed-directory-varlibcontainers: directory-varlibcontainers
 
+.PHONY: generate-dnsmasq-site-policy-section.sh
 generate-dnsmasq-site-policy-section.sh:
-	curl -sOL https://raw.githubusercontent.com/openshift-kni/lifecycle-agent/main/hack/generate-dnsmasq-site-policy-section.sh
+	curl -sOL https://raw.githubusercontent.com/$(shell echo $(LCA_GIT_REPO) | awk -F 'github.com/' '{print $$NF}')/$(LCA_GIT_BRANCH)/hack/generate-dnsmasq-site-policy-section.sh
 	chmod +x $@
 
 .PHONY: dnsmasq-workaround
