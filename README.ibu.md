@@ -1,29 +1,38 @@
 ## TL;DR Full run with vDU profile
 - Define a few environment variables:
-```
-SEED_IMAGE=quay.io/whatever/ostbackup:seed
+
+```bash
+export SEED_IMAGE=quay.io/whatever/ostbackup:seed
 export PULL_SECRET=$(jq -c . /path/to/my/pull-secret.json)
 export BACKUP_SECRET=$(jq -c . /path/to/my/repo/credentials.json)
 ```
+
 - Create seed VM with vDU profile
-```
+
+```bash
 make seed vdu
 ```
+
 - Create and push seed image
-```
+
+```bash
 make seed-image-create SEED_IMAGE=$SEED_IMAGE
 ```
+
 - Create recipient VM
-```
+
+```bash
 make recipient
 ```
+
 - Restore seed image in recipient
-```
+
+```bash
 make sno-upgrade SEED_IMAGE=$SEED_IMAGE
 ```
 
 ## Prerequisites
-- 
+
 - virt-install
 
 ```bash
@@ -31,6 +40,7 @@ sudo dnf install virt-install
 ```
 
 - In case you don't have nmstatectl installed please install it
+
 ```bash
 sudo dnf install nmstate
 ```
@@ -120,17 +130,21 @@ make seed
 
 To generate a seed image we want to:
 - Provision a VM and install SNO in it
+
 ```bash
 make seed-vm-create wait-for-seed
 ```
 
 - Prepare the seed cluster to have a couple of needed extras
+
 ```bash
 make seed-cluster-prepare
 ```
 
 #### Customize seed SNO
+
 - (OPTIONAL) Modify that installation to suit the use-case that we want to have in the seed image. In this example we install the components of a vDU profile
+
 ```bash
 make vdu
 ```
@@ -156,11 +170,13 @@ make recipient
 Or we can choose to run each step manually, to have more control of each step
 
 - Provision a VM and install SNO in it
+
 ```bash
 make recipient-vm-create wait-for-recipient
 ```
 
 - Prepare the recipient cluster for a couple of extras (LCA operator, shared /var/lib/containers)
+
 ```bash
 make recipient-cluster-prepare
 ```
@@ -191,34 +207,45 @@ and get a description of the main Makefile targets that you can use
 To be able to reuse the VMs, we can backup the qcow2 files of both seed and recipient VM
 This will allow us to skip the initial provision, allowing for faster iterations when testing
 To create a backup run:
+
 ```bash
 make seed-vm-backup
 ```
+
 or
+
 ```bash
 make recipient-vm-backup
 ```
 
 To restore an image, we run the complementary `restore` command
+
 ```bash
 make seed-vm-restore
 ```
+
 or
+
 ```bash
 make recipient-vm-restore
 ```
 
 Remember that certificates expire, so if a backed up image is old, certificates will expire and openshift wont be usable
 If certs have expired, you can run recert to issue new certificates:
+
 ```bash
 make seed-vm-recert
 ```
+
 or
+
 ```bash
 make recipient-vm-recert
 ```
+
 ### vDU profile
 A vDU profile can be applied to the image before baking with
+
 ```bash
 make vdu
 ```
@@ -226,10 +253,13 @@ make vdu
 ### Use shared directorty for /var/lib/containers
 A shared directory `/sysroot/containers` can be used to mount and share /var/lib/containers among ostree deployments
 Run:
+
 ```bash
 make seed-varlibcontainers
 ```
+
 or
+
 ```bash
 make recipient-varlibcontainers
 ```
@@ -242,9 +272,11 @@ It is important to note that for precaching to work, this change must be applied
 
 ## Examples
 ### Installing the backup into some running SNO
+
 ```
 make seed-image-restore SNO_KUBECONFIG=path/to/recipient/sno/kubeconfig SEED_IMAGE=$SEED_IMAGE
 ```
+
 - Reboot the recipient host
 
 ## Extras
