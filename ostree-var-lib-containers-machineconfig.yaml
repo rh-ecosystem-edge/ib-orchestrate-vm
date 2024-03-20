@@ -104,20 +104,3 @@ spec:
           WantedBy=local-fs.target
         enabled: true
         name: remount-var-lib-containers.service
-
-      # And then we will have to change the selinux contexts so SELinux wont block stuff that runs inside the containers
-      - contents: |
-          [Unit]
-          Description=Restore recursive SELinux security contexts
-          DefaultDependencies=no
-          After=remount-var-lib-containers.service
-          Before=container-mount-namespace.service crio.service
-          [Service]
-          Type=oneshot
-          RemainAfterExit=yes
-          ExecStart=/sbin/restorecon -R /var/lib/containers/
-          TimeoutSec=0
-          [Install]
-          WantedBy=multi-user.target graphical.target
-        enabled: true
-        name: restorecon-var-lib-containers.service
