@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RECERT_IMAGE=quay.io/edge-infrastructure/recert:v0
+RECERT_IMAGE=${RECERT_IMAGE:-quay.io/edge-infrastructure/recert:v0}
 BACKUP_DIR=/var/tmp/recert
 KUBECONFIG=/etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/localhost.kubeconfig
 ETCD_IMAGE=$(jq -r '.spec.containers[] | select(.name == "etcd") | .image' /etc/kubernetes/manifests/etcd-pod.yaml)

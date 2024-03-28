@@ -16,4 +16,4 @@ metadata:
   name: seedimage
 spec:
   seedImage: ${SEED_IMAGE}
-  # recertImage: ${RECERT_IMAGE}
+  recertImage: ${RECERT_IMAGE}

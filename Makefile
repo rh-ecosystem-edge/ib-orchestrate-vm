@@ -49,6 +49,7 @@ LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:latest
 LCA_GIT_REPO ?= https://github.com/openshift-kni/lifecycle-agent
 LCA_GIT_BRANCH ?= main
 RELEASE_ARCH ?= x86_64
+RECERT_IMAGE ?= quay.io/edge-infrastructure/recert:v0
 
 SSH_KEY_DIR = $(SNO_DIR)/ssh-key
 SSH_KEY_PUB_PATH = $(SSH_KEY_DIR)/key.pub
@@ -114,6 +115,7 @@ trigger-seed-image-create:
 	@< seedgenerator.yaml \
 		SEED_AUTH=$(shell echo '$(BACKUP_SECRET)' | base64 -w0) \
 		SEED_IMAGE=$(SEED_IMAGE) \
+		RECERT_IMAGE=$(RECERT_IMAGE) \
 		envsubst | \
 		  $(oc) apply -f -
 
@@ -403,7 +405,7 @@ directory-varlibcontainers:
 .PHONY: vm-backup
 vm-backup:
 	scp $(SSH_FLAGS) recert_script.sh core@$(VM_NAME):/var/tmp
-	ssh $(SSH_FLAGS) core@$(VM_NAME) sudo /var/tmp/recert_script.sh backup
+	ssh $(SSH_FLAGS) core@$(VM_NAME) sudo RECERT_IMAGE=$(RECERT_IMAGE) /var/tmp/recert_script.sh backup
 	$(virsh) shutdown $(VM_NAME)
 	@until $(virsh) domstate $(VM_NAME) | grep -qx 'shut off' ; do echo -n . ; sleep 5; done; echo
 	sudo cp "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME).qcow2" "$(LIBVIRT_IMAGE_PATH)/$(VM_NAME)-$(VERSION)-$(PRECACHE_MODE)-backup.qcow2"
@@ -421,7 +423,7 @@ vm-recert: CLUSTER=$(VM_NAME)
 vm-recert:
 	echo "Waiting for $(VM_NAME) to start"
 	@until ssh $(SSH_FLAGS) core@$(VM_NAME) true; do sleep 5; echo -n .; done
-	ssh $(SSH_FLAGS) core@$(VM_NAME) sudo /var/tmp/recert_script.sh recert
+	ssh $(SSH_FLAGS) core@$(VM_NAME) sudo RECERT_IMAGE=$(RECERT_IMAGE) /var/tmp/recert_script.sh recert
 	echo "Waiting for openshift to start"
 	@until [ "$$($(oc) get clusterversion -o jsonpath='{.items[*].status.conditions[?(@.type=="Available")].status}')" == "True" ]; do \
 			echo -n .; sleep 10; \
