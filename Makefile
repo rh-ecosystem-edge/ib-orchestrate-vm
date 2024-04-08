@@ -49,6 +49,9 @@ LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:latest
 LCA_GIT_REPO ?= https://github.com/openshift-kni/lifecycle-agent
 LCA_GIT_BRANCH ?= main
 RELEASE_ARCH ?= x86_64
+DEFAULT_RELEASE_IMAGE ?= quay.io/openshift-release-dev/ocp-release:$(RELEASE_VERSION)-$(RELEASE_ARCH)
+SEED_RELEASE_IMAGE ?= $(DEFAULT_RELEASE_IMAGE)
+RECIPIENT_RELEASE_IMAGE ?= $(DEFAULT_RELEASE_IMAGE)
 RECERT_IMAGE ?= quay.io/edge-infrastructure/recert:v0
 
 SSH_KEY_DIR = $(SNO_DIR)/ssh-key
@@ -139,6 +142,7 @@ sno-upgrade: lca-stage-idle lca-stage-prep lca-wait-for-prep lca-stage-upgrade l
 seed-vm-create: VM_NAME=$(SEED_VM_NAME)
 seed-vm-create: HOST_IP=$(SEED_VM_IP)
 seed-vm-create: RELEASE_VERSION=$(SEED_VERSION)
+seed-vm-create: RELEASE_IMAGE=$(SEED_RELEASE_IMAGE)
 seed-vm-create: MAC_ADDRESS=$(SEED_MAC)
 seed-vm-create: BASE_DOMAIN=$(SEED_DOMAIN)
 seed-vm-create: NET_NAME=$(NET_SEED_NAME)
@@ -205,6 +209,7 @@ vdu: ## Apply VDU profile to seed VM
 recipient-vm-create: VM_NAME=$(RECIPIENT_VM_NAME)
 recipient-vm-create: HOST_IP=$(RECIPIENT_VM_IP)
 recipient-vm-create: RELEASE_VERSION=$(RECIPIENT_VERSION)
+recipient-vm-create: RELEASE_IMAGE=$(RECIPIENT_RELEASE_IMAGE)
 recipient-vm-create: MAC_ADDRESS=$(RECIPIENT_MAC)
 recipient-vm-create: BASE_DOMAIN=$(RECIPIENT_DOMAIN)
 recipient-vm-create: NET_NAME=$(NET_RECIPIENT_NAME)
@@ -286,6 +291,7 @@ start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
 		AGENT_CONFIG=$(shell pwd)/agent-config-$(VM_NAME).yaml \
 		INSTALLER_WORKDIR=workdir-$(VM_NAME) \
 		RELEASE_VERSION=$(RELEASE_VERSION) \
+		RELEASE_IMAGE=$(RELEASE_IMAGE) \
 		CPU_CORE=$(CPU_CORE) \
 		DISK_GB=$(DISK_GB) \
 		RELEASE_ARCH=$(RELEASE_ARCH) \
