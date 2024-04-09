@@ -104,6 +104,7 @@ $(IBI_CLUSTER_CONFIG_PATH): ibi-certs credentials/pull-secret.json
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
 	DOMAIN=$(IBI_DOMAIN) \
 	HOSTNAME=$(IBI_HOSTNAME) \
+	SSH_KEY="$(shell cat $(SSH_PUBLIC_KEY))" \
 	PULL_SECRET='$(shell jq -R . credentials/pull-secret.json)' \
 	LOCALHOST_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/localhost-serving-signer-key.pem)" \
 	SERVICE_NETWORK_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/service-network-serving-signer-key.pem)" \
