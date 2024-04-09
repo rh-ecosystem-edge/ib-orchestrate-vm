@@ -7,6 +7,7 @@
   "release_registry": "quay.io",
   "hostname": "${HOSTNAME}",
   "pull_secret": ${PULL_SECRET},
+  "ssh_key": "${SSH_KEY}",
   "KubeconfigCryptoRetention": {
     "KubeAPICrypto": {
       "ServingCrypto": {
