@@ -1,11 +1,15 @@
 apiVersion: lca.openshift.io/v1alpha1
 kind: ImageBasedUpgrade
 metadata:
-    name: upgrade
+  name: upgrade
 spec:
-    stage: Idle
-    seedImageRef:
-        version: ${SEED_VERSION}
-        image: ${SEED_IMAGE}
-        pullSecretRef:
-          name: seed-pull-secret
+  stage: Idle
+  seedImageRef:
+    version: ${SEED_VERSION}
+    image: ${SEED_IMAGE}
+    pullSecretRef:
+      name: seed-pull-secret
+  autoRollbackOnFailure:
+    disabledForPostRebootConfig: $(DISABLE_IBU_ROLLBACK)
+    disabledForUpgradeCompletion: $(DISABLE_IBU_ROLLBACK)
+    disabledInitMonitor: $(DISABLE_IBU_ROLLBACK)
