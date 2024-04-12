@@ -4,13 +4,14 @@ MAKEFLAGS += --no-builtin-rules
 IMAGE_BASED_DIR = .
 SNO_DIR = ./bip-orchestrate-vm
 
+-include .config-override
+
 # Define precache mode (partition or directory)
 PRECACHE_MODE ?= partition
 
 # Define the rollback mode
 DISABLE_IBU_ROLLBACK ?= false
 
--include .config-override
 include network.env
 
 default: help
