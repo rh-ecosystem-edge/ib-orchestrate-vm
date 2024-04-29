@@ -5,8 +5,8 @@ IBI_VM_MAC ?= fa:ba:da:1b:11:b1
 IBI_VM_RAM_MB ?= $(RAM_MB)
 IBI_VM_CPUS ?= $(CPU_CORE)
 IBI_DISK_SIZE ?= $(DISK_GB)
-IBI_NET_NAME ?= $(NET_RECIPIENT_NAME)
-IBI_DOMAIN ?= $(NET_RECIPIENT_DOMAIN)
+IBI_NET_NAME ?= $(NET_TARGET_NAME)
+IBI_DOMAIN ?= $(NET_TARGET_DOMAIN)
 IBI_CLUSTER_NAME ?= $(IBI_VM_NAME)
 IBI_HOSTNAME ?= $(IBI_VM_NAME)
 IBI_INSTALLATION_DISK ?= /dev/vda
@@ -67,7 +67,7 @@ host-net-config:
 	$(SNO_DIR)/host-net-config.sh
 
 .PHONY: ibi-vm
-ibi-vm: recipient-network host-net-config ## Provision IBI VM
+ibi-vm: target-network host-net-config ## Provision IBI VM
 	RHCOS_ISO=$(IBI_RHCOS_ISO_PATH) \
 	VM_NAME=$(IBI_VM_NAME) \
 	NET_NAME=$(IBI_NET_NAME) \

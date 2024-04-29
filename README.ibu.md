@@ -19,13 +19,13 @@ make seed vdu
 make seed-image-create SEED_IMAGE=$SEED_IMAGE
 ```
 
-- Create recipient VM
+- Create target VM
 
 ```bash
-make recipient
+make target
 ```
 
-- Restore seed image in recipient
+- Restore seed image in target
 
 ```bash
 make sno-upgrade SEED_IMAGE=$SEED_IMAGE
@@ -157,13 +157,13 @@ This process will stop openshift and launch lca-cli as a podman container, and a
 make seed-image-create SEED_IMAGE=quay.io/whatever/repo:tag
 ```
 
-### Create and prepare a recipient cluster
+### Create and prepare a target cluster
 As with the seed image, this process can be done in a single step, or run each step manually
 
 #### Single step
 There is a makefile target that does all the steps for us
 ```bash
-make recipient
+make target
 ```
 
 #### Step by step
@@ -172,19 +172,19 @@ Or we can choose to run each step manually, to have more control of each step
 - Provision a VM and install SNO in it
 
 ```bash
-make recipient-vm-create wait-for-recipient
+make target-vm-create wait-for-target
 ```
 
-- Prepare the recipient cluster for a couple of extras (LCA operator, shared /var/lib/containers)
+- Prepare the target cluster for a couple of extras (LCA operator, shared /var/lib/containers)
 
 ```bash
-make recipient-cluster-prepare
+make target-cluster-prepare
 ```
 
-### Upgrade recipient SNO with a seed image
-To upgrade the `recipient` cluster using a seed image we will use [LifeCycle Agent](https://github.com/openshift-kni/lifecycle-agent), and manage everything with the CR `ImageBasedUpgrade`
+### Upgrade target SNO with a seed image
+To upgrade the `target` cluster using a seed image we will use [LifeCycle Agent](https://github.com/openshift-kni/lifecycle-agent), and manage everything with the CR `ImageBasedUpgrade`
 
-This process will upgrade the `recipient` cluster using the seed image and reboot into it
+This process will upgrade the `target` cluster using the seed image and reboot into it
 ```bash
 make sno-upgrade SEED_IMAGE=quay.io/whatever/repo:tag
 ```
@@ -204,7 +204,7 @@ make help
 and get a description of the main Makefile targets that you can use
 
 ### Backup and reuse VM qcow2 files
-To be able to reuse the VMs, we can backup the qcow2 files of both seed and recipient VM
+To be able to reuse the VMs, we can backup the qcow2 files of both seed and target VM
 This will allow us to skip the initial provision, allowing for faster iterations when testing
 To create a backup run:
 
@@ -215,7 +215,7 @@ make seed-vm-backup
 or
 
 ```bash
-make recipient-vm-backup
+make target-vm-backup
 ```
 
 To restore an image, we run the complementary `restore` command
@@ -227,7 +227,7 @@ make seed-vm-restore
 or
 
 ```bash
-make recipient-vm-restore
+make target-vm-restore
 ```
 
 Remember that certificates expire, so if a backed up image is old, certificates will expire and openshift wont be usable
@@ -240,7 +240,7 @@ make seed-vm-recert
 or
 
 ```bash
-make recipient-vm-recert
+make target-vm-recert
 ```
 
 ### vDU profile
@@ -261,23 +261,23 @@ make seed-varlibcontainers
 or
 
 ```bash
-make recipient-varlibcontainers
+make target-varlibcontainers
 ```
 
 This will create a `/sysroot/containers` in the SNO (when not specifying the cluster with the CLUSTER variable, it defaults to the seed image) to be mounted in /var/lib/containers
-The use case for this is to easily precache all the images that the cluster in the seed image will need, while original recipient cluster is still running
+The use case for this is to easily precache all the images that the cluster in the seed image will need, while original target cluster is still running
 
 #### WARNING
-It is important to note that for precaching to work, this change must be applied both in seed image and recipient cluster
+It is important to note that for precaching to work, this change must be applied both in seed image and target cluster
 
 ## Examples
 ### Installing the backup into some running SNO
 
 ```
-make seed-image-restore SNO_KUBECONFIG=path/to/recipient/sno/kubeconfig SEED_IMAGE=$SEED_IMAGE
+make seed-image-restore SNO_KUBECONFIG=path/to/target/sno/kubeconfig SEED_IMAGE=$SEED_IMAGE
 ```
 
-- Reboot the recipient host
+- Reboot the target host
 
 ## Extras
 
