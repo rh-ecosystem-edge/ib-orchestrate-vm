@@ -2,6 +2,10 @@ apiVersion: lca.openshift.io/v1alpha1
 kind: ImageBasedUpgrade
 metadata:
   name: upgrade
+  annotations:
+    auto-rollback-on-failure.lca.openshift.io/post-reboot-config: ${IBU_ROLLBACK}
+    auto-rollback-on-failure.lca.openshift.io/upgrade-completion: ${IBU_ROLLBACK}
+    auto-rollback-on-failure.lca.openshift.io/init-monitor: ${IBU_ROLLBACK}
 spec:
   stage: Idle
   seedImageRef:
@@ -9,7 +13,3 @@ spec:
     image: ${SEED_IMAGE}
     pullSecretRef:
       name: seed-pull-secret
-  autoRollbackOnFailure:
-    disabledForPostRebootConfig: ${DISABLE_IBU_ROLLBACK}
-    disabledForUpgradeCompletion: ${DISABLE_IBU_ROLLBACK}
-    disabledInitMonitor: ${DISABLE_IBU_ROLLBACK}

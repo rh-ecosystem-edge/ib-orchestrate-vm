@@ -9,8 +9,8 @@ SNO_DIR = ./bip-orchestrate-vm
 # Define precache mode (partition or directory)
 PRECACHE_MODE ?= partition
 
-# Define the rollback mode
-DISABLE_IBU_ROLLBACK ?= false
+# Set to Disabled to disable IBU rollback (case sensitive)
+IBU_ROLLBACK ?= Enabled
 
 include network.env
 
@@ -375,7 +375,7 @@ lca-stage-idle: credentials/backup-secret.json
 	$(oc) create secret generic seed-pull-secret -n openshift-lifecycle-agent --from-file=.dockerconfigjson=credentials/backup-secret.json \
 		--type=kubernetes.io/dockerconfigjson --dry-run=client -oyaml \
 		| $(oc) apply -f -
-	SEED_VERSION=$(SEED_VERSION) SEED_IMAGE=$(SEED_IMAGE) DISABLE_IBU_ROLLBACK=$(DISABLE_IBU_ROLLBACK) envsubst < imagebasedupgrade.yaml | $(oc) apply -f -
+	SEED_VERSION=$(SEED_VERSION) SEED_IMAGE=$(SEED_IMAGE) IBU_ROLLBACK=$(IBU_ROLLBACK) envsubst < imagebasedupgrade.yaml | $(oc) apply -f -
 
 .PHONY: lca-stage-prep
 lca-stage-prep: CLUSTER=$(RECIPIENT_VM_NAME)
