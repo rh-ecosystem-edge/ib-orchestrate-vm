@@ -22,7 +22,6 @@ IB_CLI = ./bin/ib-cli
 # Image that holds ib-cli. Can be different than LCA_IMAGE mostly for testing purposes
 IB_IMAGE ?= $(LCA_IMAGE)
 
-SSH_PUBLIC_KEY ?= $(HOME)/.ssh/id_rsa.pub
 IBI_RHCOS_ISO_PATH = $(LIBVIRT_IMAGE_PATH)/rhcos-$(IBI_VM_NAME).iso
 IBI_CONFIG_DIR = ibi-config
 IBI_CLUSTER_CONFIG_TEMPLATE = ibi-manifest.template
@@ -36,7 +35,7 @@ $(IB_CLI):
 	podman run -it -v $(shell pwd):/data:Z --rm --entrypoint cp $(IB_IMAGE) /usr/local/bin/ib-cli ./data/bin/
 
 .PHONY: ibi-iso
-ibi-iso: $(IB_CLI) credentials/pull-secret.json credentials/backup-secret.json ## Create ISO to be used in IBI
+ibi-iso: $(IB_CLI) $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json credentials/backup-secret.json ## Create ISO to be used in IBI
 	mkdir -p $(IBI_WORK_DIR)
 	$(IB_CLI) create-iso \
 		--installation-disk $(IBI_INSTALLATION_DISK) \
@@ -46,7 +45,7 @@ ibi-iso: $(IB_CLI) credentials/pull-secret.json credentials/backup-secret.json #
 		--seed-version $(SEED_VERSION) \
 		--auth-file credentials/backup-secret.json \
 		--pullsecret-file credentials/pull-secret.json \
-		--ssh-public-key-file $(SSH_PUBLIC_KEY) \
+		--ssh-public-key-file $(SSH_KEY_PUB_PATH) \
 		--dir ./$(IBI_WORK_DIR)
 	sudo cp ./$(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
 	sudo chmod a+r "$(IBI_RHCOS_ISO_PATH)"
@@ -104,7 +103,7 @@ $(IBI_CLUSTER_CONFIG_PATH): ibi-certs credentials/pull-secret.json
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
 	DOMAIN=$(IBI_DOMAIN) \
 	HOSTNAME=$(IBI_HOSTNAME) \
-	SSH_KEY="$(shell cat $(SSH_PUBLIC_KEY))" \
+	SSH_KEY="$(shell cat $(SSH_KEY_PUB_PATH))" \
 	PULL_SECRET='$(shell jq -R . credentials/pull-secret.json)' \
 	LOCALHOST_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/localhost-serving-signer-key.pem)" \
 	SERVICE_NETWORK_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/service-network-serving-signer-key.pem)" \
