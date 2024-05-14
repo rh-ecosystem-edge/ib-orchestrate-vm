@@ -11,6 +11,7 @@ IBI_CLUSTER_NAME ?= $(IBI_VM_NAME)
 IBI_HOSTNAME ?= $(IBI_VM_NAME)
 IBI_INSTALLATION_DISK ?= /dev/vda
 IBI_WORK_DIR ?= ibi-iso-work-dir
+IBI_KUBECONFIG=kubeconfig.ibi
 
 ifeq ($(PRECACHE_MODE),directory)
 	IBI_EXTRA_PARTITION_START ?= use_directory
@@ -27,6 +28,9 @@ IBI_CONFIG_DIR = ibi-config
 IBI_CLUSTER_CONFIG_TEMPLATE = ibi-manifest.template
 IBI_CLUSTER_CONFIG_PATH = $(IBI_CONFIG_DIR)/cluster-configuration/manifest.json
 IBI_CLUSTER_CONFIG_MANIFESTS = $(IBI_CONFIG_DIR)/cluster-configuration/manifests
+
+.PHONY: ibi
+ibi: ibi-iso ibi-logs ibi-config.iso ibi-attach-config.iso ibi-reboot-wait
 
 .PHONY: $(IB_CLI)
 $(IB_CLI):
@@ -89,14 +93,14 @@ ibi-logs: ## Show logs of the IBI installation process
 .PHONY: ibi-certs
 ibi-certs:
 	@echo "Generating new certificates"
-	rm -rf ./ibi-certs ./kubeconfig.ibi
+	rm -rf ./ibi-certs $(IBI_KUBECONFIG)
 	./ibi/generate_certs.sh $(IBI_CLUSTER_NAME) $(IBI_DOMAIN)
 
 .PHONY: $(IBI_CLUSTER_CONFIG_PATH)
 $(IBI_CLUSTER_CONFIG_PATH): ibi-certs credentials/pull-secret.json
 	mkdir -p $(shell dirname $(IBI_CLUSTER_CONFIG_PATH))
 	rm -rf $@
-	NODE_IP=$(shell virsh domifaddr ${IBI_VM_NAME} | grep ipv4 | awk -F " " '{print $$4}' | cut -d'/' -f1) \
+	NODE_IP=$(shell $(virsh) domifaddr ${IBI_VM_NAME} | grep ipv4 | awk -F " " '{print $$4}' | cut -d'/' -f1) \
 	CLUSTER_ID=$(shell uuidgen) \
 	VM_NAME=$(IBI_VM_NAME) \
 	SEED_VERSION=$(SEED_VERSION) \
@@ -122,20 +126,24 @@ ibi-config: $(IBI_CLUSTER_CONFIG_PATH) $(IBI_CLUSTER_CONFIG_MANIFESTS)
 .PHONY: ibi-config.iso
 ibi-config.iso: ibi-config ## Create ibi-config.iso
 	mkisofs -o $@ -R -V "cluster-config" $(IBI_CONFIG_DIR)
-	cp $@ $(LIBVIRT_IMAGE_PATH)
+	sudo cp $@ $(LIBVIRT_IMAGE_PATH)
 
 .PHONY: ibi-attach-config.iso
 ibi-attach-config.iso: ## Attach ibi-config.iso file to IBI VM
-	virsh change-media $(IBI_VM_NAME) --config sda $(LIBVIRT_IMAGE_PATH)/ibi-config.iso
+	$(virsh) change-media $(IBI_VM_NAME) --config sda $(LIBVIRT_IMAGE_PATH)/ibi-config.iso
 
 .PHONY: ibi-reboot
 ibi-reboot: ## Reboot ibi VM
-	virsh reboot $(IBI_VM_NAME)
+	$(virsh) reboot $(IBI_VM_NAME)
+
+.PHONY: ibi-reboot-wait
+ibi-reboot-wait: SNO_KUBECONFIG=$(IBI_KUBECONFIG)
+ibi-reboot-wait: ibi-reboot wait-for-install-complete
 
 # Delete generated files
 .PHONY: ibi-clean
 ibi-clean: ibi-vm-clean
-	rm -fr credentials ibi-certs ibi-config/certs ibi-config.iso ibi-config/cluster-configuration/manifest.json kubeconfig.ibi ibi-ignition.json rhcos-ibi.iso rhcos-live.x86_64.iso
+	rm -fr credentials ibi-certs ibi-config/certs ibi-config.iso ibi-config/cluster-configuration/manifest.json $(IBI_KUBECONFIG) ibi-ignition.json rhcos-ibi.iso rhcos-live.x86_64.iso
 
 # So vim treats this file as a makefile
 # vim: set filetype=make:
