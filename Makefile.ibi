@@ -30,7 +30,7 @@ IBI_CLUSTER_CONFIG_PATH = $(IBI_CONFIG_DIR)/cluster-configuration/manifest.json
 IBI_CLUSTER_CONFIG_MANIFESTS = $(IBI_CONFIG_DIR)/cluster-configuration/manifests
 
 .PHONY: ibi
-ibi: ibi-iso ibi-logs ibi-config.iso ibi-attach-config.iso ibi-reboot-wait
+ibi: ibi-iso ibi-vm ibi-logs ibi-config.iso ibi-attach-config.iso ibi-reboot-wait
 
 .PHONY: $(IB_CLI)
 $(IB_CLI):
