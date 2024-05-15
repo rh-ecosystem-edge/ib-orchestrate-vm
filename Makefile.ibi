@@ -87,8 +87,8 @@ ibi-vm-remove: vm-remove ## Remove IBI VM and the storage associated with it
 .PHONY: logs
 ibi-logs: ## Show logs of the IBI installation process
 	echo "Waiting for $(IBI_VM_NAME) to be accessible"
-	@until ssh $(SSH_FLAGS) core@$(IBI_VM_NAME) true; do sleep 5; echo -n .; done; echo
-	ssh $(SSH_FLAGS) core@$(IBI_VM_NAME) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image Based Installation./ { exit }'"
+	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP) true; do sleep 5; echo -n .; done; echo
+	ssh $(SSH_FLAGS) core@$(IBI_VM_IP) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image Based Installation./ { exit }'"
 
 .PHONY: ibi-certs
 ibi-certs:
