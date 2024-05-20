@@ -100,7 +100,8 @@ ibi-certs:
 $(IBI_CLUSTER_CONFIG_PATH): ibi-certs credentials/pull-secret.json
 	mkdir -p $(shell dirname $(IBI_CLUSTER_CONFIG_PATH))
 	rm -rf $@
-	NODE_IP=$(shell $(virsh) domifaddr ${IBI_VM_NAME} | grep ipv4 | awk -F " " '{print $$4}' | cut -d'/' -f1) \
+	$(info Generating $(IBI_CLUSTER_CONFIG_PATH))
+	@NODE_IP=$(shell $(virsh) domifaddr ${IBI_VM_NAME} | grep ipv4 | awk -F " " '{print $$4}' | cut -d'/' -f1) \
 	CLUSTER_ID=$(shell uuidgen) \
 	VM_NAME=$(IBI_VM_NAME) \
 	SEED_VERSION=$(SEED_VERSION) \
