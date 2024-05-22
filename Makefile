@@ -345,6 +345,7 @@ wait-for-install-complete:
 	@until [ "$$($(oc) get clusterversion -o jsonpath='{.items[*].status.conditions[?(@.type=="Available")].status}')" == "True" ]; do \
 			echo -n .; sleep 10; \
 	done; \
+	make -C $(SNO_DIR) abi-wait-complete INSTALLER_WORKDIR=workdir-$(CLUSTER); \
 	echo " DONE"
 
 .PHONY: credentials/backup-secret.json
