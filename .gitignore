@@ -1,5 +1,6 @@
 bip-orchestrate-vm
 lifecycle-agent
+openshift-installer
 /.dns_changes_confirmed
 /net.xml
 /nohup.out
@@ -11,12 +12,6 @@ lifecycle-agent
 /*.kubeconfig
 generate-dnsmasq-site-policy-section.sh
 .config-override
-ibi-certs/
-ibi-config/certs
-ibi-config.iso
-ibi-config/cluster-configuration/manifest.json
-kubeconfig.ibi
-ibi-ignition.json
 ibi-iso-work-dir/
 bin/
 agent-config-seed.yaml

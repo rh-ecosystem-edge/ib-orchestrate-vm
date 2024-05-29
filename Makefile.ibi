@@ -1,6 +1,7 @@
 ## Image Based Installation
 IBI_VM_NAME ?= ibi
 IBI_VM_IP ?= 192.168.127.74
+IBI_VM_NETWORK ?= 192.168.127.0/24
 IBI_VM_MAC ?= fa:ba:da:1b:11:b1
 IBI_VM_RAM_MB ?= $(RAM_MB)
 IBI_VM_CPUS ?= $(CPU_CORE)
@@ -11,7 +12,26 @@ IBI_CLUSTER_NAME ?= $(IBI_VM_NAME)
 IBI_HOSTNAME ?= $(IBI_VM_NAME)
 IBI_INSTALLATION_DISK ?= /dev/vda
 IBI_WORK_DIR ?= ibi-iso-work-dir
-IBI_KUBECONFIG=kubeconfig.ibi
+IBI_INSTALL_CONFIG ?= $(IBI_WORK_DIR)/install-config.yaml
+IBI_KUBECONFIG = $(IBI_WORK_DIR)/auth/kubeconfig
+
+# We will be using mresvanis repo until the imagebased command is present in openshift/installer's repo
+OPENSHIFT_INSTALLER_REPO ?= https://github.com/mresvanis/installer
+OPENSHIFT_INSTALLER_BRANCH ?= add-config-iso-cluster-configuration
+# TODO: Once https://github.com/openshift/installer/pull/8514 is merged, delete the two previous lines, and uncomment the following two :)
+# OPENSHIFT_INSTALLER_REPO ?= https://github.com/openshift/installer
+# OPENSHIFT_INSTALLER_BRANCH ?= image-based-installer
+
+OPENSHIFT_INSTALLER_DIR ?= openshift-installer
+OPENSHIFT_INSTALLER_BIN ?= $(OPENSHIFT_INSTALLER_DIR)/bin/openshift-install
+
+# Used to populate releaseRegistry in imagebased-config.yaml
+IBI_RELEASE_REGISTRY ?= quay.io
+
+IMAGEBASED_CONFIG_TEMPLATE = imagebased-config-template.yaml
+ifdef DHCP
+    IMAGEBASED_CONFIG_TEMPLATE = imagebased-config-template-dhcp.yaml
+endif
 
 ifeq ($(PRECACHE_MODE),directory)
 	IBI_EXTRA_PARTITION_START ?= use_directory
@@ -24,19 +44,25 @@ IB_CLI = ./bin/ib-cli
 IB_IMAGE ?= $(LCA_IMAGE)
 
 IBI_RHCOS_ISO_PATH = $(LIBVIRT_IMAGE_PATH)/rhcos-$(IBI_VM_NAME).iso
-IBI_CONFIG_DIR = ibi-config
 IBI_CLUSTER_CONFIG_TEMPLATE = ibi-manifest.template
-IBI_CLUSTER_CONFIG_PATH = $(IBI_CONFIG_DIR)/cluster-configuration/manifest.json
-IBI_CLUSTER_CONFIG_MANIFESTS = $(IBI_CONFIG_DIR)/cluster-configuration/manifests
 
 .PHONY: ibi
-ibi: ibi-iso ibi-vm ibi-logs ibi-config.iso ibi-attach-config.iso ibi-reboot-wait
+ibi: ibi-iso ibi-vm ibi-logs build-openshift-install imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
 
 .PHONY: $(IB_CLI)
 $(IB_CLI):
 	mkdir -p bin
 	podman pull $(IB_IMAGE)
 	podman run -it -v $(shell pwd):/data:Z --rm --entrypoint cp $(IB_IMAGE) /usr/local/bin/ib-cli ./data/bin/
+
+.PHONY: openshift-installer
+openshift-installer:
+	@if [ -d $@ ]; then \
+		git -C $@ checkout -B $(OPENSHIFT_INSTALLER_BRANCH);\
+		git -C $@ pull;\
+	else \
+		git clone $(OPENSHIFT_INSTALLER_REPO) --branch $(OPENSHIFT_INSTALLER_BRANCH) $(OPENSHIFT_INSTALLER_DIR);\
+	fi
 
 .PHONY: ibi-iso
 ibi-iso: $(IB_CLI) $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json credentials/backup-secret.json ## Create ISO to be used in IBI
@@ -90,61 +116,65 @@ ibi-logs: ## Show logs of the IBI installation process
 	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP) true; do sleep 5; echo -n .; done; echo
 	ssh $(SSH_FLAGS) core@$(IBI_VM_IP) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image Based Installation./ { exit }'"
 
-.PHONY: ibi-certs
-ibi-certs:
-	@echo "Generating new certificates"
-	rm -rf ./ibi-certs $(IBI_KUBECONFIG)
-	./ibi/generate_certs.sh $(IBI_CLUSTER_NAME) $(IBI_DOMAIN)
+.PHONY: build-openshift-install
+build-openshift-install: openshift-installer ## Build openshift-install binary
+	cd openshift-installer && ./hack/build.sh
 
-.PHONY: $(IBI_CLUSTER_CONFIG_PATH)
-$(IBI_CLUSTER_CONFIG_PATH): ibi-certs credentials/pull-secret.json
-	mkdir -p $(shell dirname $(IBI_CLUSTER_CONFIG_PATH))
-	rm -rf $@
-	$(info Generating $(IBI_CLUSTER_CONFIG_PATH))
-	@NODE_IP=$(shell $(virsh) domifaddr ${IBI_VM_NAME} | grep ipv4 | awk -F " " '{print $$4}' | cut -d'/' -f1) \
-	CLUSTER_ID=$(shell uuidgen) \
-	VM_NAME=$(IBI_VM_NAME) \
-	SEED_VERSION=$(SEED_VERSION) \
+.PHONY: ibi-install-config
+ibi-install-config:
+	$(info Creating IBI install-config.yaml)
+	@mkdir -p $(IBI_WORK_DIR)
+	@# CLUSTER_NETWORK and CLUSTER_SVC_NETWORK are ommited because they are not used (the ones from the seed image are used)
+	@INSTALLER_WORKDIR=../$(IBI_WORK_DIR) \
+	PULL_SECRET='$(PULL_SECRET)' \
+	SSH_KEY_PUB_PATH=$(SSH_KEY_PUB_PATH) \
+	INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
-	DOMAIN=$(IBI_DOMAIN) \
-	HOSTNAME=$(IBI_HOSTNAME) \
-	SSH_KEY="$(shell cat $(SSH_KEY_PUB_PATH))" \
-	PULL_SECRET='$(shell jq -R . credentials/pull-secret.json)' \
-	LOCALHOST_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/localhost-serving-signer-key.pem)" \
-	SERVICE_NETWORK_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/service-network-serving-signer-key.pem)" \
-	LOADBALANCER_SIGNER_PRIVATE_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/loadbalancer-serving-signer-key.pem)" \
-	ADMIN_CA_CERT="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/admin-kubeconfig-signer.crt)" \
-	INGRESS_CA_KEY="$(shell awk 'NF {sub(/\r/, ""); printf "%s\\n",$$0;}' ibi-certs/ingresskey-ingress-operator-key.pem)" \
-	envsubst < $(IBI_CLUSTER_CONFIG_TEMPLATE) > $@
+	BASE_DOMAIN=$(IBI_DOMAIN) \
+	MACHINE_NETWORK=$(IBI_VM_NETWORK) \
+		make -C $(SNO_DIR) ../$(IBI_WORK_DIR)/install-config.yaml
 
-.PHONY: $(IBI_CLUSTER_CONFIG_MANIFESTS)
-$(IBI_CLUSTER_CONFIG_MANIFESTS):
-	mkdir -p $(IBI_CLUSTER_CONFIG_MANIFESTS)
+.PHONY: ibi-imagebased-config
+ibi-imagebased-config:
+	$(info Creating IBI imagebased-config.yaml)
+	@mkdir -p $(IBI_WORK_DIR)
+	@< $(IMAGEBASED_CONFIG_TEMPLATE) \
+		VM_NAME=$(IBI_VM_NAME) \
+		HOST_IP=$(IBI_VM_IP) \
+		HOST_MAC=$(IBI_VM_MAC) \
+		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(IBI_NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
+		RELEASE_REGISTRY=$(IBI_RELEASE_REGISTRY) \
+		envsubst > $(IBI_WORK_DIR)/imagebased-config.yaml
 
-.PHONY: ibi-config
-ibi-config: $(IBI_CLUSTER_CONFIG_PATH) $(IBI_CLUSTER_CONFIG_MANIFESTS)
+.PHONY: imagebasedconfig.iso
+imagebasedconfig.iso: RELEASE_VERSION=$(SEED_VERSION)
+imagebasedconfig.iso: $(IBI_WORK_DIR)/imagebasedconfig.iso ## Create imagebasedconfig.iso using openshift-installer
 
-.PHONY: ibi-config.iso
-ibi-config.iso: ibi-config ## Create ibi-config.iso
-	mkisofs -o $@ -R -V "cluster-config" $(IBI_CONFIG_DIR)
+.PHONY: $(IBI_WORK_DIR)/imagebasedconfig.iso
+$(IBI_WORK_DIR)/imagebasedconfig.iso: RELEASE_VERSION=$(SEED_VERSION)
+$(IBI_WORK_DIR)/imagebasedconfig.iso: ibi-install-config ibi-imagebased-config
+	OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE=$(DEFAULT_RELEASE_IMAGE) $(OPENSHIFT_INSTALLER_BIN) imagebased create config-image --dir $(IBI_WORK_DIR)
 	sudo cp $@ $(LIBVIRT_IMAGE_PATH)
 
 .PHONY: ibi-attach-config.iso
 ibi-attach-config.iso: ## Attach ibi-config.iso file to IBI VM
-	$(virsh) change-media $(IBI_VM_NAME) --config sda $(LIBVIRT_IMAGE_PATH)/ibi-config.iso
+	$(virsh) change-media $(IBI_VM_NAME) --config sda $(LIBVIRT_IMAGE_PATH)/imagebasedconfig.iso
 
 .PHONY: ibi-reboot
 ibi-reboot: ## Reboot ibi VM
 	$(virsh) reboot $(IBI_VM_NAME)
 
+.PHONY: wait-for-ibi
+wait-for-ibi: SNO_KUBECONFIG=$(IBI_KUBECONFIG)
+wait-for-ibi: wait-for-install-complete ## Wait for IBI cluster to be healthy
+
 .PHONY: ibi-reboot-wait
-ibi-reboot-wait: SNO_KUBECONFIG=$(IBI_KUBECONFIG)
-ibi-reboot-wait: ibi-reboot wait-for-install-complete
+ibi-reboot-wait: ibi-reboot wait-for-ibi
 
 # Delete generated files
 .PHONY: ibi-clean
-ibi-clean: ibi-vm-clean
-	rm -fr credentials ibi-certs ibi-config/certs ibi-config.iso ibi-config/cluster-configuration/manifest.json $(IBI_KUBECONFIG) ibi-ignition.json rhcos-ibi.iso rhcos-live.x86_64.iso
+ibi-clean: ibi-vm-remove
+	rm -fr credentials $(IBI_WORK_DIR)
 
 # So vim treats this file as a makefile
 # vim: set filetype=make:
