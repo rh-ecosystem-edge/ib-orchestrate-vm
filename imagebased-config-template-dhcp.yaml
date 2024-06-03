@@ -1,0 +1,11 @@
+apiVersion: v1beta1
+kind: ImageBasedConfig
+metadata:
+  name: ${VM_NAME}-imagebased-config
+  namespace: cluster0
+hostname: ${VM_NAME}
+releaseRegistry: ${RELEASE_REGISTRY}
+networkConfig:
+  interfaces:
+    - name: enp1s0
+      mac-address: ${HOST_MAC}
