@@ -28,6 +28,7 @@ OPENSHIFT_INSTALLER_BIN ?= $(OPENSHIFT_INSTALLER_DIR)/bin/openshift-install
 # Used to populate releaseRegistry in imagebased-config.yaml
 IBI_RELEASE_REGISTRY ?= quay.io
 
+IBI_INSTALL_ISO_TEMPLATE = image-based-install-iso-template.yaml
 IMAGEBASED_CONFIG_TEMPLATE = imagebased-config-template.yaml
 ifdef DHCP
     IMAGEBASED_CONFIG_TEMPLATE = imagebased-config-template-dhcp.yaml
@@ -43,8 +44,8 @@ IB_CLI = ./bin/ib-cli
 # Image that holds ib-cli. Can be different than LCA_IMAGE mostly for testing purposes
 IB_IMAGE ?= $(LCA_IMAGE)
 
+IBI_RHCOS_LIVE_ISO_URL ?= https://mirror.openshift.com/pub/openshift-v4/amd64/dependencies/rhcos/latest/rhcos-live.x86_64.iso
 IBI_RHCOS_ISO_PATH = $(LIBVIRT_IMAGE_PATH)/rhcos-$(IBI_VM_NAME).iso
-IBI_CLUSTER_CONFIG_TEMPLATE = ibi-manifest.template
 
 .PHONY: ibi
 ibi: ibi-iso ibi-vm ibi-logs build-openshift-install imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
@@ -120,8 +121,21 @@ ibi-logs: ## Show logs of the IBI installation process
 build-openshift-install: openshift-installer ## Build openshift-install binary
 	cd openshift-installer && ./hack/build.sh
 
+.PHONY: image-based-install-iso.yaml
+image-based-install-iso.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-install-iso.yaml
+	$(info Creating IBI image-based-install-iso.yaml)
+	@mkdir -p $(IBI_WORK_DIR)
+	@< $(IBI_INSTALL_ISO_TEMPLATE) \
+		RHCOS_LIVE_ISO_URL=$(IBI_RHCOS_LIVE_ISO_URL) \
+		SEED_IMAGE=$(SEED_IMAGE) \
+		SEED_VERSION=$(SEED_VERSION) \
+		PULL_SECRET='$(PULL_SECRET)' \
+		INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
+		SSH_KEY='$(shell cat $(SSH_KEY_PUB_PATH))' \
+		envsubst > $(IBI_WORK_DIR)/image-based-install-iso.yaml
+
 .PHONY: ibi-install-config
-ibi-install-config:
+ibi-install-config: $(SSH_KEY_PRIV_PATH)
 	$(info Creating IBI install-config.yaml)
 	@mkdir -p $(IBI_WORK_DIR)
 	@# CLUSTER_NETWORK and CLUSTER_SVC_NETWORK are ommited because they are not used (the ones from the seed image are used)
