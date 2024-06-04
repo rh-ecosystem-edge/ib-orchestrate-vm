@@ -21,7 +21,7 @@ export PULL_SECRET=$(jq -c . /path/to/my/pull-secret.json)
 export BACKUP_SECRET=$(jq -c . /path/to/my/repo/credentials.json)
 
 # Optional variables
-export SSH_KEY_PUB_PATH=~/.ssh/id_rsa.pub
+export SSH_KEY=~/.ssh/id_rsa.pub
 export LCA_IMAGE=quay.io/customized/lca_image:your_tag
 export IBI_INSTALLATION_DISK=/dev/vda
 ```

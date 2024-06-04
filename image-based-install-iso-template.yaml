@@ -1,0 +1,7 @@
+rhcosLiveIso: ${RHCOS_LIVE_ISO_URL}
+seedImage: ${SEED_IMAGE}
+seedVersion: "${SEED_VERSION}"
+pullSecret: |
+  ${PULL_SECRET}
+installationDisk: ${INSTALLATION_DISK}
+sshKey: ${SSH_KEY}
