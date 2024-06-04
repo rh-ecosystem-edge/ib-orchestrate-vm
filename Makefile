@@ -61,6 +61,8 @@ RECERT_IMAGE ?= quay.io/edge-infrastructure/recert:v0
 SSH_KEY_DIR = $(SNO_DIR)/ssh-key
 SSH_KEY_PUB_PATH = $(SSH_KEY_DIR)/key.pub
 SSH_KEY_PRIV_PATH = $(SSH_KEY_DIR)/key
+# SSH_KEY can be supplied by user
+SSH_KEY ?= SSH_KEY_PUB_PATH
 
 SSH_FLAGS = -o IdentityFile=$(SSH_KEY_PRIV_PATH) \
  			-o UserKnownHostsFile=/dev/null \

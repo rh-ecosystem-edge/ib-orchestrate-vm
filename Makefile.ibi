@@ -76,7 +76,7 @@ ibi-iso: $(IB_CLI) $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json credentials
 		--seed-version $(SEED_VERSION) \
 		--auth-file credentials/backup-secret.json \
 		--pullsecret-file credentials/pull-secret.json \
-		--ssh-public-key-file $(SSH_KEY_PUB_PATH) \
+		--ssh-public-key-file $(SSH_KEY) \
 		--dir ./$(IBI_WORK_DIR)
 	sudo cp ./$(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
 	sudo chmod a+r "$(IBI_RHCOS_ISO_PATH)"
@@ -131,7 +131,7 @@ image-based-install-iso.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-install
 		SEED_VERSION=$(SEED_VERSION) \
 		PULL_SECRET='$(PULL_SECRET)' \
 		INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
-		SSH_KEY='$(shell cat $(SSH_KEY_PUB_PATH))' \
+		SSH_KEY='$(shell cat $(SSH_KEY))' \
 		envsubst > $(IBI_WORK_DIR)/image-based-install-iso.yaml
 
 .PHONY: ibi-install-config
@@ -141,7 +141,7 @@ ibi-install-config: $(SSH_KEY_PRIV_PATH)
 	@# CLUSTER_NETWORK and CLUSTER_SVC_NETWORK are ommited because they are not used (the ones from the seed image are used)
 	@INSTALLER_WORKDIR=../$(IBI_WORK_DIR) \
 	PULL_SECRET='$(PULL_SECRET)' \
-	SSH_KEY_PUB_PATH=$(SSH_KEY_PUB_PATH) \
+	SSH_KEY=$(SSH_KEY) \
 	INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
 	BASE_DOMAIN=$(IBI_DOMAIN) \
