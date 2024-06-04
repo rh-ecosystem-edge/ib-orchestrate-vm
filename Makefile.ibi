@@ -66,19 +66,10 @@ openshift-installer:
 	fi
 
 .PHONY: ibi-iso
-ibi-iso: $(IB_CLI) $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json credentials/backup-secret.json ## Create ISO to be used in IBI
+ibi-iso: $(IB_CLI) $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json image-based-install-iso.yaml ## Create ISO to be used in IBI
 	mkdir -p $(IBI_WORK_DIR)
-	$(IB_CLI) create-iso \
-		--installation-disk $(IBI_INSTALLATION_DISK) \
-		--extra-partition-start $(IBI_EXTRA_PARTITION_START) \
-		--lca-image $(LCA_IMAGE) \
-		--seed-image $(SEED_IMAGE) \
-		--seed-version $(SEED_VERSION) \
-		--auth-file credentials/backup-secret.json \
-		--pullsecret-file credentials/pull-secret.json \
-		--ssh-public-key-file $(SSH_KEY) \
-		--dir ./$(IBI_WORK_DIR)
-	sudo cp ./$(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
+	$(IB_CLI) create-iso --dir $(IBI_WORK_DIR)
+	sudo cp $(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
 	sudo chmod a+r "$(IBI_RHCOS_ISO_PATH)"
 
 .PHONY: ibi-iso-clean
