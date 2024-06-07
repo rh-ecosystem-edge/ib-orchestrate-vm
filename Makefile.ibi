@@ -162,7 +162,7 @@ $(IBI_WORK_DIR)/imagebasedconfig.iso: ibi-install-config ibi-imagebased-config
 	sudo cp $@ $(LIBVIRT_IMAGE_PATH)
 
 .PHONY: ibi-attach-config.iso
-ibi-attach-config.iso: ## Attach ibi-config.iso file to IBI VM
+ibi-attach-config.iso: ## Attach imagebasedconfig.iso file to IBI VM
 	$(virsh) change-media $(IBI_VM_NAME) --config sda $(LIBVIRT_IMAGE_PATH)/imagebasedconfig.iso
 
 .PHONY: ibi-reboot
