@@ -191,11 +191,15 @@ seed-lifecycle-agent-deploy: CLUSTER=$(SEED_VM_NAME)
 seed-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: seed-cluster-prepare
-seed-cluster-prepare: seed-directory-varlibcontainers seed-lifecycle-agent-deploy ## Prepare seed VM cluster
+seed-cluster-prepare: seed-directory-varlibcontainers seed-oadp-deploy seed-lifecycle-agent-deploy ## Prepare seed VM cluster
 
 .PHONY: seed-directory-varlibcontainers
 seed-directory-varlibcontainers: CLUSTER=$(SEED_VM_NAME)
 seed-directory-varlibcontainers: directory-varlibcontainers
+
+.PHONY: seed-oadp-deploy
+seed-oadp-deploy: CLUSTER=$(SEED_VM_NAME)
+seed-oadp-deploy: oadp-deploy
 
 .PHONY: generate-dnsmasq-site-policy-section.sh
 generate-dnsmasq-site-policy-section.sh:
@@ -258,14 +262,18 @@ target-lifecycle-agent-deploy: CLUSTER=$(TARGET_VM_NAME)
 target-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: target-cluster-prepare
-target-cluster-prepare: target-directory-varlibcontainers oadp-deploy target-lifecycle-agent-deploy ## Prepare target VM cluster
+target-cluster-prepare: CLUSTER=$(TARGET_VM_NAME)
+target-cluster-prepare: target-directory-varlibcontainers target-oadp-deploy target-lifecycle-agent-deploy ## Prepare target VM cluster
 
 .PHONY: target-directory-varlibcontainers
 target-directory-varlibcontainers: CLUSTER=$(TARGET_VM_NAME)
 target-directory-varlibcontainers: directory-varlibcontainers
 
+.PHONY: target-oadp-deploy
+target-oadp-deploy: CLUSTER=$(TARGET_VM_NAME)
+target-oadp-deploy: oadp-deploy
+
 .PHONY: oadp-deploy
-oadp-deploy: CLUSTER=$(TARGET_VM_NAME)
 oadp-deploy:
 	$(oc) apply -f oadp-operator.yaml
 	@echo "Waiting for deployment openshift-adp-controller-manager to be available"; \
