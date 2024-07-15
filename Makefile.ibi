@@ -15,12 +15,8 @@ IBI_WORK_DIR ?= ibi-iso-work-dir
 IBI_INSTALL_CONFIG ?= $(IBI_WORK_DIR)/install-config.yaml
 IBI_KUBECONFIG = $(IBI_WORK_DIR)/auth/kubeconfig
 
-# We will be using mresvanis repo until the imagebased command is present in openshift/installer's repo
-OPENSHIFT_INSTALLER_REPO ?= https://github.com/mresvanis/installer
-OPENSHIFT_INSTALLER_BRANCH ?= add-config-iso-cluster-configuration
-# TODO: Once https://github.com/openshift/installer/pull/8514 is merged, delete the two previous lines, and uncomment the following two :)
-# OPENSHIFT_INSTALLER_REPO ?= https://github.com/openshift/installer
-# OPENSHIFT_INSTALLER_BRANCH ?= image-based-installer
+OPENSHIFT_INSTALLER_REPO ?= https://github.com/openshift/installer
+OPENSHIFT_INSTALLER_BRANCH ?= master
 
 OPENSHIFT_INSTALLER_DIR ?= openshift-installer
 OPENSHIFT_INSTALLER_BIN ?= $(OPENSHIFT_INSTALLER_DIR)/bin/openshift-install
