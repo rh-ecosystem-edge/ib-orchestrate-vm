@@ -1,0 +1,28 @@
+#
+# Note: This is a sample ImageBasedInstallConfig file showing
+# which fields are available to aid you in creating your
+# own image-based-installation-config.yaml file.
+#
+apiVersion: v1beta1
+kind: ImageBasedInstallationConfig
+metadata:
+  name: image-based-installation-config
+seedImage: "${SEED_IMAGE}"
+seedVersion: "${SEED_VERSION}"
+installationDisk: "${INSTALLATION_DISK}"
+networkConfig:
+  interfaces:
+    - name: eth0
+      type: ethernet
+      state: up
+      mac-address: 00:00:00:00:00:00
+      ipv4:
+        enabled: true
+        address:
+          - ip: 192.168.122.2
+            prefix-length: 23
+        dhcp: false
+pullSecret: |
+  ${PULL_SECRET}
+sshKey: |
+  ${SSH_KEY}

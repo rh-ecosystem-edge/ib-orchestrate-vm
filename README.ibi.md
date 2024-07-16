@@ -22,14 +22,13 @@ export BACKUP_SECRET=$(jq -c . /path/to/my/repo/credentials.json)
 
 # Optional variables
 export SSH_KEY=~/.ssh/id_rsa.pub
-export LCA_IMAGE=quay.io/customized/lca_image:your_tag
 export IBI_INSTALLATION_DISK=/dev/vda
 ```
 
 2. Prepare a coreos live iso with a custom ignition
 
 ```bash
-make ibi-iso
+make build-openshift-installer ibi-iso
 ```
 
 3. Provision VM
