@@ -24,10 +24,11 @@ OPENSHIFT_INSTALLER_BIN ?= $(OPENSHIFT_INSTALLER_DIR)/bin/openshift-install
 # Used to populate releaseRegistry in imagebased-config.yaml
 IBI_RELEASE_REGISTRY ?= quay.io
 
-IBI_INSTALL_ISO_TEMPLATE = image-based-install-iso-template.yaml
-IMAGEBASED_CONFIG_TEMPLATE = imagebased-config-template.yaml
+IBI_RELEASE_IMAGE ?= $(DEFAULT_RELEASE_IMAGE)
+IBI_INSTALLATION_CONFIG_TEMPLATE = image-based-installation-config-template.yaml
+IBI_CONFIG_TEMPLATE = image-based-config-template.yaml
 ifdef DHCP
-    IMAGEBASED_CONFIG_TEMPLATE = imagebased-config-template-dhcp.yaml
+    IBI_CONFIG_TEMPLATE = image-based-config-template-dhcp.yaml
 endif
 
 ifeq ($(PRECACHE_MODE),directory)
@@ -36,21 +37,10 @@ else
 	IBI_EXTRA_PARTITION_START ?= -40G
 endif
 
-IB_CLI = ./bin/ib-cli
-# Image that holds ib-cli. Can be different than LCA_IMAGE mostly for testing purposes
-IB_IMAGE ?= $(LCA_IMAGE)
-
-IBI_RHCOS_LIVE_ISO_URL ?= https://mirror.openshift.com/pub/openshift-v4/amd64/dependencies/rhcos/latest/rhcos-live.x86_64.iso
 IBI_RHCOS_ISO_PATH = $(LIBVIRT_IMAGE_PATH)/rhcos-$(IBI_VM_NAME).iso
 
 .PHONY: ibi
-ibi: ibi-iso ibi-vm ibi-logs build-openshift-install imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
-
-.PHONY: $(IB_CLI)
-$(IB_CLI):
-	mkdir -p bin
-	podman pull $(IB_IMAGE)
-	podman run -it -v $(shell pwd):/data:Z --rm --entrypoint cp $(IB_IMAGE) /usr/local/bin/ib-cli ./data/bin/
+ibi: build-openshift-install ibi-iso ibi-vm ibi-logs imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
 
 .PHONY: openshift-installer
 openshift-installer:
@@ -62,15 +52,15 @@ openshift-installer:
 	fi
 
 .PHONY: ibi-iso
-ibi-iso: $(IB_CLI) $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json image-based-install-iso.yaml ## Create ISO to be used in IBI
+ibi-iso: $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json image-based-installation-config.yaml ## Create ISO to be used in IBI
 	mkdir -p $(IBI_WORK_DIR)
-	$(IB_CLI) create-iso --dir $(IBI_WORK_DIR)
+	OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE=$(IBI_RELEASE_IMAGE) $(OPENSHIFT_INSTALLER_BIN) image-based create image --dir $(IBI_WORK_DIR)
 	sudo cp $(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
 	sudo chmod a+r "$(IBI_RHCOS_ISO_PATH)"
 
 .PHONY: ibi-iso-clean
 ibi-iso-clean:
-	-sudo rm -rf $(IBI_RHCOS_ISO_PATH) $(IBI_WORK_DIR) $(IB_CLI)
+	-sudo rm -rf $(IBI_RHCOS_ISO_PATH) $(IBI_WORK_DIR)
 
 # Configure dhcp and dns for host
 .PHONY: host-net-config
@@ -108,18 +98,17 @@ ibi-logs: ## Show logs of the IBI installation process
 build-openshift-install: openshift-installer ## Build openshift-install binary
 	cd openshift-installer && ./hack/build.sh
 
-.PHONY: image-based-install-iso.yaml
-image-based-install-iso.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-install-iso.yaml
-	$(info Creating IBI image-based-install-iso.yaml)
+.PHONY: image-based-installation-config.yaml
+image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-installation-config.yaml
+	$(info Creating IBI image-based-installation-config.yaml)
 	@mkdir -p $(IBI_WORK_DIR)
-	@< $(IBI_INSTALL_ISO_TEMPLATE) \
-		RHCOS_LIVE_ISO_URL=$(IBI_RHCOS_LIVE_ISO_URL) \
+	@< $(IBI_INSTALLATION_CONFIG_TEMPLATE) \
 		SEED_IMAGE=$(SEED_IMAGE) \
 		SEED_VERSION=$(SEED_VERSION) \
 		PULL_SECRET='$(PULL_SECRET)' \
 		INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
 		SSH_KEY='$(shell cat $(SSH_KEY))' \
-		envsubst > $(IBI_WORK_DIR)/image-based-install-iso.yaml
+		envsubst > $(IBI_WORK_DIR)/image-based-installation-config.yaml
 
 .PHONY: ibi-install-config
 ibi-install-config: $(SSH_KEY_PRIV_PATH)
@@ -137,15 +126,15 @@ ibi-install-config: $(SSH_KEY_PRIV_PATH)
 
 .PHONY: ibi-imagebased-config
 ibi-imagebased-config:
-	$(info Creating IBI imagebased-config.yaml)
+	$(info Creating IBI image-based-config.yaml)
 	@mkdir -p $(IBI_WORK_DIR)
-	@< $(IMAGEBASED_CONFIG_TEMPLATE) \
+	@< $(IBI_CONFIG_TEMPLATE) \
 		VM_NAME=$(IBI_VM_NAME) \
 		HOST_IP=$(IBI_VM_IP) \
 		HOST_MAC=$(IBI_VM_MAC) \
 		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(IBI_NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
 		RELEASE_REGISTRY=$(IBI_RELEASE_REGISTRY) \
-		envsubst > $(IBI_WORK_DIR)/imagebased-config.yaml
+		envsubst > $(IBI_WORK_DIR)/image-based-config.yaml
 
 .PHONY: imagebasedconfig.iso
 imagebasedconfig.iso: RELEASE_VERSION=$(SEED_VERSION)
@@ -154,7 +143,7 @@ imagebasedconfig.iso: $(IBI_WORK_DIR)/imagebasedconfig.iso ## Create imagebasedc
 .PHONY: $(IBI_WORK_DIR)/imagebasedconfig.iso
 $(IBI_WORK_DIR)/imagebasedconfig.iso: RELEASE_VERSION=$(SEED_VERSION)
 $(IBI_WORK_DIR)/imagebasedconfig.iso: ibi-install-config ibi-imagebased-config
-	OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE=$(DEFAULT_RELEASE_IMAGE) $(OPENSHIFT_INSTALLER_BIN) imagebased create config-image --dir $(IBI_WORK_DIR)
+	$(OPENSHIFT_INSTALLER_BIN) image-based create config-image --dir $(IBI_WORK_DIR)
 	sudo cp $@ $(LIBVIRT_IMAGE_PATH)
 
 .PHONY: ibi-attach-config.iso
