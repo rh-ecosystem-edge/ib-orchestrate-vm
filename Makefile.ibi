@@ -15,11 +15,8 @@ IBI_WORK_DIR ?= ibi-iso-work-dir
 IBI_INSTALL_CONFIG ?= $(IBI_WORK_DIR)/install-config.yaml
 IBI_KUBECONFIG = $(IBI_WORK_DIR)/auth/kubeconfig
 
-OPENSHIFT_INSTALLER_REPO ?= https://github.com/openshift/installer
-OPENSHIFT_INSTALLER_BRANCH ?= master
-
-OPENSHIFT_INSTALLER_DIR ?= openshift-installer
-OPENSHIFT_INSTALLER_BIN ?= $(OPENSHIFT_INSTALLER_DIR)/bin/openshift-install
+OPENSHIFT_INSTALLER_RELEASE_IMAGE ?= quay.io/openshift-release-dev/ocp-release:4.17.0-ec.3-x86_64
+OPENSHIFT_INSTALLER_BIN ?= bin/openshift-install
 
 # Used to populate releaseRegistry in imagebased-config.yaml
 IBI_RELEASE_REGISTRY ?= quay.io
@@ -40,19 +37,14 @@ endif
 IBI_RHCOS_ISO_PATH = $(LIBVIRT_IMAGE_PATH)/rhcos-$(IBI_VM_NAME).iso
 
 .PHONY: ibi
-ibi: build-openshift-install ibi-iso ibi-vm ibi-logs imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
+ibi: ibi-iso ibi-vm ibi-logs imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
 
-.PHONY: openshift-installer
-openshift-installer:
-	@if [ -d $@ ]; then \
-		git -C $@ checkout -B $(OPENSHIFT_INSTALLER_BRANCH);\
-		git -C $@ pull;\
-	else \
-		git clone $(OPENSHIFT_INSTALLER_REPO) --branch $(OPENSHIFT_INSTALLER_BRANCH) $(OPENSHIFT_INSTALLER_DIR);\
-	fi
+$(OPENSHIFT_INSTALLER_BIN): credentials/pull-secret.json
+	oc adm release extract --registry-config=credentials/pull-secret.json --command=openshift-install --to ./bin $(OPENSHIFT_INSTALLER_RELEASE_IMAGE)
+	touch $(OPENSHIFT_INSTALLER_BIN)
 
 .PHONY: ibi-iso
-ibi-iso: $(SSH_KEY_PRIV_PATH) credentials/pull-secret.json image-based-installation-config.yaml ## Create ISO to be used in IBI
+ibi-iso: $(SSH_KEY_PRIV_PATH) $(OPENSHIFT_INSTALLER_BIN) credentials/pull-secret.json image-based-installation-config.yaml ## Create ISO to be used in IBI
 	mkdir -p $(IBI_WORK_DIR)
 	OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE=$(IBI_RELEASE_IMAGE) $(OPENSHIFT_INSTALLER_BIN) image-based create image --dir $(IBI_WORK_DIR)
 	sudo cp $(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
@@ -93,10 +85,6 @@ ibi-logs: ## Show logs of the IBI installation process
 	echo "Waiting for $(IBI_VM_NAME) to be accessible"
 	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP) true; do sleep 5; echo -n .; done; echo
 	ssh $(SSH_FLAGS) core@$(IBI_VM_IP) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image Based Installation./ { exit }'"
-
-.PHONY: build-openshift-install
-build-openshift-install: openshift-installer ## Build openshift-install binary
-	cd openshift-installer && ./hack/build.sh
 
 .PHONY: image-based-installation-config.yaml
 image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-installation-config.yaml
@@ -142,7 +130,7 @@ imagebasedconfig.iso: $(IBI_WORK_DIR)/imagebasedconfig.iso ## Create imagebasedc
 
 .PHONY: $(IBI_WORK_DIR)/imagebasedconfig.iso
 $(IBI_WORK_DIR)/imagebasedconfig.iso: RELEASE_VERSION=$(SEED_VERSION)
-$(IBI_WORK_DIR)/imagebasedconfig.iso: ibi-install-config ibi-imagebased-config
+$(IBI_WORK_DIR)/imagebasedconfig.iso: $(OPENSHIFT_INSTALLER_BIN) ibi-install-config ibi-imagebased-config
 	$(OPENSHIFT_INSTALLER_BIN) image-based create config-image --dir $(IBI_WORK_DIR)
 	sudo cp $@ $(LIBVIRT_IMAGE_PATH)
 
