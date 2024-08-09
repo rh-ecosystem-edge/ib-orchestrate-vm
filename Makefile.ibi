@@ -40,8 +40,9 @@ IBI_RHCOS_ISO_PATH = $(LIBVIRT_IMAGE_PATH)/rhcos-$(IBI_VM_NAME).iso
 ibi: ibi-iso ibi-vm ibi-logs imagebasedconfig.iso ibi-attach-config.iso ibi-reboot wait-for-ibi
 
 $(OPENSHIFT_INSTALLER_BIN): credentials/pull-secret.json
-	oc adm release extract --registry-config=credentials/pull-secret.json --command=openshift-install --to ./bin $(OPENSHIFT_INSTALLER_RELEASE_IMAGE)
-	touch $(OPENSHIFT_INSTALLER_BIN)
+ifeq ("$(wildcard $(OPENSHIFT_INSTALLER_BIN))","") # do not run this target if the openshift-install binary is already present
+	oc adm release extract --registry-config=credentials/pull-secret.json --command=openshift-install --to $(OPENSHIFT_INSTALLER_BIN) $(OPENSHIFT_INSTALLER_RELEASE_IMAGE)
+endif
 
 .PHONY: ibi-iso
 ibi-iso: $(SSH_KEY_PRIV_PATH) $(OPENSHIFT_INSTALLER_BIN) credentials/pull-secret.json image-based-installation-config.yaml ## Create ISO to be used in IBI
