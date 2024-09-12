@@ -28,7 +28,7 @@ export IBI_INSTALLATION_DISK=/dev/vda
 2. Prepare a coreos live iso with a custom ignition
 
 ```bash
-make build-openshift-installer ibi-iso
+make ibi-iso
 ```
 
 3. Provision VM
