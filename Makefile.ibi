@@ -41,7 +41,7 @@ ibi: ibi-iso ibi-vm ibi-logs imagebasedconfig.iso ibi-attach-config.iso ibi-rebo
 
 $(OPENSHIFT_INSTALLER_BIN): credentials/pull-secret.json
 ifeq ("$(wildcard $(OPENSHIFT_INSTALLER_BIN))","") # do not run this target if the openshift-install binary is already present
-	oc adm release extract --registry-config=credentials/pull-secret.json --command=openshift-install --to $(OPENSHIFT_INSTALLER_BIN) $(OPENSHIFT_INSTALLER_RELEASE_IMAGE)
+	oc adm release extract --registry-config=credentials/pull-secret.json --command=openshift-install --to $(dir $(OPENSHIFT_INSTALLER_BIN)) $(OPENSHIFT_INSTALLER_RELEASE_IMAGE)
 endif
 
 .PHONY: ibi-iso
