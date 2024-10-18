@@ -36,6 +36,8 @@ backup_cluster_certificates(){
 }
 
 run_recert(){
+    local router_cn_ca=$(oc get secret -n openshift-ingress-operator router-ca -ojsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -subject -noout -nameopt multiline | grep commonName | awk '{ print $3 }')
+
     # Stop kubelet
     echo "Stopping kubelet"
     systemctl stop kubelet
@@ -73,7 +75,7 @@ run_recert(){
             --use-key "kube-apiserver-lb-signer /certs/loadbalancer-serving-signer.key" \
             --use-key "kube-apiserver-localhost-signer /certs/localhost-serving-signer.key" \
             --use-key "kube-apiserver-service-network-signer /certs/service-network-serving-signer.key" \
-            --use-key "ingresskey-ingress-operator /certs/ingresskey-ingress-operator.key"
+            --use-key "${router_cn_ca} /certs/ingresskey-ingress-operator.key"
 
     # Kill etcd
     echo "Stopping etcd"
