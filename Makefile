@@ -49,6 +49,8 @@ LIBVIRT_IMAGE_PATH := $(or ${LIBVIRT_IMAGE_PATH},/var/lib/libvirt/images)
 CPU_CORE ?= 16
 RAM_MB ?= 32768
 DISK_GB ?= 140
+# use this var to deploy the lifecycle-agent operator from an operator-sdk bundle image
+LCA_OPERATOR_BUNDLE_IMAGE ?= ""
 LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:latest
 LCA_GIT_REPO ?= https://github.com/openshift-kni/lifecycle-agent
 LCA_GIT_BRANCH ?= main
@@ -372,14 +374,20 @@ credentials/pull-secret.json:
 
 .PHONY: lifecycle-agent-deploy
 lifecycle-agent-deploy: lifecycle-agent
-	KUBECONFIG=../$(SNO_KUBECONFIG) \
-	IMG=$(LCA_IMAGE) \
-		make -C lifecycle-agent install deploy
-	@echo "Waiting for deployment lifecycle-agent-controller-manager to be available"; \
-	until $(oc) wait deployment -n openshift-lifecycle-agent lifecycle-agent-controller-manager --for=condition=available=true; do \
-		echo -n .;\
-		sleep 5; \
-	done; echo
+	@export KUBECONFIG=../$(SNO_KUBECONFIG); \
+	if [ -n $(LCA_OPERATOR_BUNDLE_IMAGE) ]; then \
+		BUNDLE_IMG=$(LCA_OPERATOR_BUNDLE_IMAGE) \
+			make -C lifecycle-agent bundle-run ;\
+	else \
+		IMG=$(LCA_IMAGE) \
+			make -C lifecycle-agent install deploy ;\
+		echo "Waiting for deployment lifecycle-agent-controller-manager to be available"; \
+		until $(oc) wait deployment -n openshift-lifecycle-agent lifecycle-agent-controller-manager --for=condition=available=true; do \
+			echo -n . ;\
+			sleep 5 ;\
+		done ;\
+		echo ;\
+	fi
 
 .PHONY: lca-stage-idle
 lca-stage-idle: CLUSTER=$(TARGET_VM_NAME)
