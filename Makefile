@@ -376,6 +376,7 @@ credentials/pull-secret.json:
 lifecycle-agent-deploy: lifecycle-agent
 	@export KUBECONFIG=../$(SNO_KUBECONFIG); \
 	if [ -n $(LCA_OPERATOR_BUNDLE_IMAGE) ]; then \
+		mkdir -p lifecycle-agent/bin; \
 		make -C lifecycle-agent operator-sdk; \
 		BUNDLE_IMG=$(LCA_OPERATOR_BUNDLE_IMAGE) \
 			make -C lifecycle-agent bundle-run ;\
