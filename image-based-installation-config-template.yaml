@@ -12,24 +12,16 @@ seedVersion: "${SEED_VERSION}"
 installationDisk: "${INSTALLATION_DISK}"
 networkConfig:
   interfaces:
-    - name: enp1s0
+    - name: eth0
       type: ethernet
       state: up
-      mac-address: ${HOST_MAC}
+      mac-address: 00:00:00:00:00:00
       ipv4:
         enabled: true
         address:
-          - ip: ${HOST_IP}
-            prefix-length: 24
-  routes:
-    config:
-      - next-hop-address: ${HOST_ROUTE}
-        next-hop-interface: enp1s0
-        destination: 0.0.0.0/0
-  dns-resolver:
-    config:
-      server:
-        - ${HOST_ROUTE}
+          - ip: 192.168.122.2
+            prefix-length: 23
+        dhcp: false
 pullSecret: |
   ${PULL_SECRET}
 sshKey: |
