@@ -45,7 +45,7 @@ ifeq ("$(wildcard $(OPENSHIFT_INSTALLER_BIN))","") # do not run this target if t
 endif
 
 .PHONY: ibi-iso
-ibi-iso: $(OPENSHIFT_INSTALLER_BIN) credentials/pull-secret.json image-based-installation-config.yaml ## Create ISO to be used in IBI
+ibi-iso: $(SSH_KEY_PRIV_PATH) $(OPENSHIFT_INSTALLER_BIN) credentials/pull-secret.json image-based-installation-config.yaml ## Create ISO to be used in IBI
 	mkdir -p $(IBI_WORK_DIR)
 	OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE=$(IBI_RELEASE_IMAGE) $(OPENSHIFT_INSTALLER_BIN) image-based create image --dir $(IBI_WORK_DIR)
 	sudo cp $(IBI_WORK_DIR)/rhcos-ibi.iso "$(IBI_RHCOS_ISO_PATH)"
@@ -88,15 +88,12 @@ ibi-logs: ## Show logs of the IBI installation process
 	ssh $(SSH_FLAGS) core@$(IBI_VM_IP) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
 
 .PHONY: image-based-installation-config.yaml
-image-based-installation-config.yaml: bip-orchestrate-vm target-network $(SSH_KEY_PRIV_PATH)## Create image-based-installation-config.yaml
+image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-installation-config.yaml
 	$(info Creating IBI image-based-installation-config.yaml)
 	@mkdir -p $(IBI_WORK_DIR)
 	@< $(IBI_INSTALLATION_CONFIG_TEMPLATE) \
 		SEED_IMAGE=$(SEED_IMAGE) \
 		SEED_VERSION=$(SEED_VERSION) \
-		HOST_IP=$(IBI_VM_IP) \
-		HOST_MAC=$(IBI_VM_MAC) \
-		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(IBI_NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
 		PULL_SECRET='$(PULL_SECRET)' \
 		INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
 		SSH_KEY='$(shell cat $(SSH_KEY))' \
