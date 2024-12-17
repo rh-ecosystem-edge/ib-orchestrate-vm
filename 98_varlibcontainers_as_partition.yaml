@@ -17,11 +17,11 @@ spec:
       disks:
         - device: /dev/vda
           partitions:
-            - label: varlibcontainers
+            - label: var-lib-containers
               startMiB: 100000 # space left for the CoreOS partition.
               sizeMiB: 0 # Use all available space
       filesystems:
-        - device: /dev/disk/by-partlabel/varlibcontainers
+        - device: /dev/disk/by-partlabel/var-lib-containers
           format: xfs
           mountOptions:
             - defaults
@@ -33,12 +33,12 @@ spec:
         - contents: |-
             [Unit]
             Before=local-fs.target
-            Requires=systemd-fsck@dev-disk-by\x2dpartlabel-varlibcontainers.service
-            After=systemd-fsck@dev-disk-by\x2dpartlabel-varlibcontainers.service
+            Requires=systemd-fsck@dev-disk-by\x2dpartlabel-var\x2dlib\x2dcontainers.service
+            After=systemd-fsck@dev-disk-by\x2dpartlabel-var\x2dlib\x2dcontainers.service
 
             [Mount]
             Where=/var/lib/containers
-            What=/dev/disk/by-partlabel/varlibcontainers
+            What=/dev/disk/by-partlabel/var-lib-containers
             Type=xfs
             Options=defaults,prjquota
 

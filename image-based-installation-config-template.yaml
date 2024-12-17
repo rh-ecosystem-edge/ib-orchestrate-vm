@@ -10,6 +10,7 @@ metadata:
 seedImage: "${SEED_IMAGE}"
 seedVersion: "${SEED_VERSION}"
 installationDisk: "${INSTALLATION_DISK}"
+extraPartitionLabel: var-lib-containers
 networkConfig:
   interfaces:
     - name: eth0
