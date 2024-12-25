@@ -44,7 +44,7 @@ TARGET_MAC ?= 52:54:00:fa:ba:da
 
 UPGRADE_TIMEOUT ?= 30m
 
-LIBVIRT_IMAGE_PATH := $(or ${LIBVIRT_IMAGE_PATH},/var/lib/libvirt/images)
+LIBVIRT_IMAGE_PATH := $$(or ${LIBVIRT_IMAGE_PATH},/var/lib/libvirt/images)
 
 CPU_CORE ?= 16
 RAM_MB ?= 32768
