@@ -19,7 +19,7 @@ OPENSHIFT_INSTALLER_RELEASE_IMAGE ?= quay.io/openshift-release-dev/ocp-release:4
 OPENSHIFT_INSTALLER_BIN ?= bin/openshift-install
 
 # Used to populate releaseRegistry in imagebased-config.yaml
-IBI_RELEASE_REGISTRY ?= quay.io
+IBI_RELEASE_REGISTRY ?= ""
 
 IBI_RELEASE_IMAGE ?= $(DEFAULT_RELEASE_IMAGE)
 IBI_INSTALLATION_CONFIG_TEMPLATE = image-based-installation-config-template.yaml
