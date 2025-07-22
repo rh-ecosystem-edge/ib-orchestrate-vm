@@ -265,7 +265,6 @@ target-lifecycle-agent-deploy: lifecycle-agent-deploy
 
 .PHONY: target-cluster-prepare
 target-cluster-prepare: CLUSTER=$(TARGET_VM_NAME)
-target-cluster-prepare: LCA_OPERATOR_BUNDLE_IMAGE=$(TARGET_LCA_REF)
 target-cluster-prepare: target-directory-varlibcontainers target-oadp-deploy target-lifecycle-agent-deploy ## Prepare target VM cluster
 
 .PHONY: target-directory-varlibcontainers
