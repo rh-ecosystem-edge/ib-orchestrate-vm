@@ -103,9 +103,13 @@ bip-orchestrate-vm:
 .PHONY: lifecycle-agent
 lifecycle-agent:
 	@if [ -d $@ ]; then \
-		git -C $@ pull ;\
+		git -C $@ pull && \
+		git -C $@ submodule sync --recursive && \
+		git -C $@ submodule update --init --recursive --remote; \
 	else \
-		git clone $(LCA_GIT_REPO) --branch $(LCA_GIT_BRANCH) lifecycle-agent;\
+		git clone $(LCA_GIT_REPO) --branch $(LCA_GIT_BRANCH) lifecycle-agent && \
+		git -C lifecycle-agent submodule sync --recursive && \
+		git -C lifecycle-agent submodule update --init --recursive --remote; \
 	fi
 
 ## VM provision in a single step
