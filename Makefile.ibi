@@ -28,6 +28,7 @@ ifdef DHCP
     IBI_CONFIG_TEMPLATE = image-based-config-template-dhcp.yaml
 endif
 
+
 ifeq ($(PRECACHE_MODE),directory)
 	IBI_EXTRA_PARTITION_START ?= use_directory
 else
@@ -96,6 +97,7 @@ image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based
 		SEED_VERSION=$(SEED_VERSION) \
 		PULL_SECRET='$(PULL_SECRET)' \
 		INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
+		IBI_EXTRA_PARTITION_START='$(IBI_EXTRA_PARTITION_START)' \
 		SSH_KEY='$(shell cat $(SSH_KEY))' \
 		envsubst > $(IBI_WORK_DIR)/image-based-installation-config.yaml
 

@@ -2,12 +2,13 @@
 
 This repo provides the framework for running Image Base Upgrade (IBU) and
 Installation (IBI) on libvirt virtual machines for development, debugging and
-experimentation purposes.
+experimentation purposes. It also provides framework for performing IP Configuration (IPC) on SNO clusters.
 
 Usage:
 
 - [IBI Usage](README.ibi.md)
 - [IBU Usage](README.ibu.md)
+- [IPC Usage](ipc/README.md)
 
 ## Requirements
 

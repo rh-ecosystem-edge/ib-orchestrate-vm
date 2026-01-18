@@ -379,7 +379,7 @@ credentials/pull-secret.json:
 
 .PHONY: lifecycle-agent-deploy
 lifecycle-agent-deploy: lifecycle-agent
-	@export KUBECONFIG=../$(SNO_KUBECONFIG); \
+	@export KUBECONFIG=$$(realpath $(SNO_KUBECONFIG)); \
 	if [ -n $(LCA_OPERATOR_BUNDLE_IMAGE) ]; then \
 		mkdir -p lifecycle-agent/bin; \
 		make -C lifecycle-agent operator-sdk; \
@@ -519,3 +519,4 @@ help:
 	' $(MAKEFILE_LIST)
 
 include Makefile.ibi
+include ipc/Makefile
