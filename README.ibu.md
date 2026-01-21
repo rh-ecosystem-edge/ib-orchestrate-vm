@@ -5,6 +5,7 @@
 export SEED_IMAGE=quay.io/whatever/ostbackup:seed
 export PULL_SECRET=$(jq -c . /path/to/my/pull-secret.json)
 export BACKUP_SECRET=$(jq -c . /path/to/my/repo/credentials.json)
+export IP_STACK=v4        # v4|v6|v4v6|v6v4 (dual-stack supported)
 ```
 
 - Create seed VM with vDU profile

@@ -1,0 +1,535 @@
+From 150155358b0ed2e36dfd16a70ec853ba849d3411 Mon Sep 17 00:00:00 2001
+From: Dan Manor <dmanor@redhat.com>
+Date: Wed, 21 Jan 2026 03:37:18 -0500
+Subject: [PATCH 1/2] Enable v6 and dual-stack via IP_STACK (v4/v6/v4v6/v6v4)
+
+---
+ Makefile                     |  82 +++++++++++++++------
+ host-net-config.sh           |  56 +++++++++++++--
+ install-config.yaml.template |   7 +-
+ render-install-config.py     | 131 +++++++++++++++++++++++++++++++++
+ render-net-xml.py            | 135 +++++++++++++++++++++++++++++++++++
+ 5 files changed, 379 insertions(+), 32 deletions(-)
+ create mode 100644 render-install-config.py
+ create mode 100644 render-net-xml.py
+
+diff --git a/Makefile b/Makefile
+index 4a73fc2..9d88096 100644
+--- a/Makefile
++++ b/Makefile
+@@ -71,9 +71,37 @@ SSH_FLAGS = -o IdentityFile=$(SSH_KEY_PRIV_PATH) \
+  			-o UserKnownHostsFile=/dev/null \
+  			-o StrictHostKeyChecking=no
+ 
+-HOST_IP ?= 192.168.126.10
++IP_STACK ?= v4
++
++# Per-family network inputs. Defaults keep legacy v4-only behavior.
++MACHINE_NETWORK_V4 ?= $(MACHINE_NETWORK)
++MACHINE_NETWORK_V6 ?=
++CLUSTER_NETWORK_V4 ?= $(CLUSTER_NETWORK)
++CLUSTER_NETWORK_V6 ?=
++CLUSTER_SVC_NETWORK_V4 ?= $(CLUSTER_SVC_NETWORK)
++CLUSTER_SVC_NETWORK_V6 ?=
++CLUSTER_NETWORK_HOST_PREFIX_V4 ?= 23
++CLUSTER_NETWORK_HOST_PREFIX_V6 ?= 64
++
++# Per-family host IPs. Defaults keep legacy v4-only behavior.
++HOST_IP_V4 ?= 192.168.126.10
++HOST_IP_V6 ?=
++
++# Derived primary/secondary from IP_STACK (v4|v6|v4v6|v6v4)
++STACK_PRIMARY_FAM = $(if $(filter v6 v6v4,$(IP_STACK)),V6,V4)
++STACK_SECONDARY_FAM = $(if $(filter v4v6,$(IP_STACK)),V6,$(if $(filter v6v4,$(IP_STACK)),V4,))
++
++HOST_IP_PRIMARY = $(HOST_IP_$(STACK_PRIMARY_FAM))
++HOST_IP_SECONDARY = $(if $(STACK_SECONDARY_FAM),$(HOST_IP_$(STACK_SECONDARY_FAM)),)
++
++MACHINE_NETWORK_PRIMARY = $(MACHINE_NETWORK_$(STACK_PRIMARY_FAM))
++MACHINE_NETWORK_SECONDARY = $(if $(STACK_SECONDARY_FAM),$(MACHINE_NETWORK_$(STACK_SECONDARY_FAM)),)
++
++ip_for_ssh = $(if $(findstring :,$(1)),[$(1)],$(1))
++
++HOST_IP ?= $(HOST_IP_PRIMARY)
+ HOST_MAC ?= 52:54:00:ee:42:e1
+-SSH_HOST = core@$(HOST_IP)
++SSH_HOST = core@$(call ip_for_ssh,$(HOST_IP_PRIMARY))
+ 
+ $(SSH_KEY_PRIV_PATH):
+ 	@echo "No private key $@ found, generating a private-public pair"
+@@ -125,31 +153,40 @@ destroy-libvirt-net:
+ # Render the install config from the template with the correct pull secret and SSH key
+ $(INSTALL_CONFIG): $(INSTALL_CONFIG_TEMPLATE) checkenv $(SSH_KEY_PUB_PATH)
+ 	$(info Generating $(INSTALL_CONFIG))
+-	@sed -e 's|YOUR_PULL_SECRET|$(PULL_SECRET)|' \
+-	    -e 's|YOUR_SSH_KEY|$(shell cat $(SSH_KEY_PUB_PATH))|' \
+-	    -e 's|INSTALLATION_DISK|$(INSTALLATION_DISK)|' \
+-	    -e 's|CLUSTER_NAME|$(CLUSTER_NAME)|' \
+-	    -e 's|BASE_DOMAIN|$(BASE_DOMAIN)|' \
+-	    -e 's|CLUSTER_NETWORK|$(CLUSTER_NETWORK)|' \
+-	    -e 's|MACHINE_NETWORK|$(MACHINE_NETWORK)|' \
+-	    -e 's|CLUSTER_SVC_NETWORK|$(CLUSTER_SVC_NETWORK)|' \
+-	    $(INSTALL_CONFIG_TEMPLATE) > $(INSTALL_CONFIG)
++	@BASE_DOMAIN=$(BASE_DOMAIN) \
++	CLUSTER_NAME=$(CLUSTER_NAME) \
++	INSTALLATION_DISK=$(INSTALLATION_DISK) \
++	PULL_SECRET='$(PULL_SECRET)' \
++	SSH_KEY_PUB_PATH=$(SSH_KEY_PUB_PATH) \
++	IP_STACK=$(IP_STACK) \
++	CLUSTER_NETWORK_V4=$(CLUSTER_NETWORK_V4) \
++	CLUSTER_NETWORK_V6=$(CLUSTER_NETWORK_V6) \
++	CLUSTER_SVC_NETWORK_V4=$(CLUSTER_SVC_NETWORK_V4) \
++	CLUSTER_SVC_NETWORK_V6=$(CLUSTER_SVC_NETWORK_V6) \
++	MACHINE_NETWORK_V4=$(MACHINE_NETWORK_V4) \
++	MACHINE_NETWORK_V6=$(MACHINE_NETWORK_V6) \
++	CLUSTER_NETWORK_HOST_PREFIX_V4=$(CLUSTER_NETWORK_HOST_PREFIX_V4) \
++	CLUSTER_NETWORK_HOST_PREFIX_V6=$(CLUSTER_NETWORK_HOST_PREFIX_V6) \
++	python3 $(SNO_DIR)/render-install-config.py $(INSTALL_CONFIG_TEMPLATE) $(INSTALL_CONFIG)
+ 
+ # Render the libvirt net config file with the network name and host IP
+ $(NET_CONFIG): $(NET_CONFIG_TEMPLATE)
+-	sed -e 's/REPLACE_NET_NAME/$(NET_NAME)/' \
+-	    -e 's|REPLACE_NET_UUID|$(NET_UUID)|' \
+-	    -e 's/REPLACE_NET_BRIDGE_NAME/$(NET_BRIDGE_NAME)/' \
+-	    -e 's/REPLACE_NET_MAC/$(NET_MAC)/' \
+-	    -e 's/REPLACE_NET_PREFIX/$(NET_PREFIX)/g' \
+-	    -e 's|BASE_DOMAIN|$(BASE_DOMAIN)|' \
+-	    $(NET_CONFIG_TEMPLATE) > $@
++	@NET_NAME=$(NET_NAME) \
++	NET_UUID=$(NET_UUID) \
++	NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
++	NET_MAC=$(NET_MAC) \
++	BASE_DOMAIN=$(BASE_DOMAIN) \
++	IP_STACK=$(IP_STACK) \
++	MACHINE_NETWORK_V4=$(MACHINE_NETWORK_V4) \
++	MACHINE_NETWORK_V6=$(MACHINE_NETWORK_V6) \
++	python3 $(SNO_DIR)/render-net-xml.py $@
+ 
+ network: $(NET_CONFIG)
+ 	NET_NAME=$(NET_NAME) \
+ 	NET_UUID=$(NET_UUID) \
+ 	NET_XML=$(NET_CONFIG) \
+-	HOST_IP=$(HOST_IP) \
++	HOST_IP=$(HOST_IP_PRIMARY) \
++	HOST_IP_SECONDARY=$(HOST_IP_SECONDARY) \
+ 	CLUSTER_NAME=$(CLUSTER_NAME) \
+ 	BASE_DOMAIN=$(BASE_DOMAIN) \
+ 	$(SNO_DIR)/virt-create-net.sh
+@@ -257,7 +294,8 @@ abi-wait-complete: $(INSTALLER_BIN)
+ # Configure dhcp and dns for host
+ .PHONY: host-net-config
+ host-net-config:
+-	HOST_IP=$(HOST_IP) \
++	HOST_IP=$(HOST_IP_PRIMARY) \
++	HOST_IP_SECONDARY=$(HOST_IP_SECONDARY) \
+ 	CLUSTER_NAME=$(CLUSTER_NAME) \
+ 	BASE_DOMAIN=$(BASE_DOMAIN) \
+ 	NET_NAME=$(NET_NAME) \
+@@ -279,6 +317,6 @@ gather:
+ 	@echo If this fails, try killing running SSH agent instances. Installer will prefer those \
+ over your explicitly provided key file
+ 	$(INSTALLER_BIN) gather bootstrap \
+-	--bootstrap $(HOST_IP) \
+-	--master $(HOST_IP) \
++	--bootstrap $(call ip_for_ssh,$(HOST_IP_PRIMARY)) \
++	--master $(call ip_for_ssh,$(HOST_IP_PRIMARY)) \
+ 	--key $(SSH_KEY_PRIV_PATH)
+diff --git a/host-net-config.sh b/host-net-config.sh
+index 7610215..de25d1a 100755
+--- a/host-net-config.sh
++++ b/host-net-config.sh
+@@ -13,15 +13,59 @@ _dnsmasq_add_if_not_exists(){
+     sudo tee /etc/NetworkManager/dnsmasq.d/bip.conf < $tmpfile
+ }
+ 
+-# Update libvirt dhcp configuration
+-if sudo virsh net-dumpxml $NET_NAME | grep -q "mac='$HOST_MAC'" ; then
+-    action=modify
+-else
+-    action=add-last
++_ip_family() {
++    if [[ "$1" == *:* ]]; then
++        echo ipv6
++    else
++        echo ipv4
++    fi
++}
++
++_parent_index_for_family() {
++    local fam="$1"
++    sudo virsh net-dumpxml "$NET_NAME" | awk -v fam="$fam" '
++        BEGIN{idx=0}
++        /<ip /{
++            if ($0 ~ "family='\''"fam"'\''") { print idx; exit 0 }
++            idx++
++        }
++        END{ exit 1 }
++    '
++}
++
++_update_dhcp_host() {
++    local ip="$1"
++    local fam="$(_ip_family "$ip")"
++    local parent_index
++    if ! parent_index="$(_parent_index_for_family "$fam")"; then
++        echo "WARN: no <ip family='$fam'> block found in libvirt network $NET_NAME; skipping DHCP host update for $ip" >&2
++        return 0
++    fi
++
++    # Update libvirt dhcp configuration (idempotent)
++    if sudo virsh net-dumpxml "$NET_NAME" | grep -q "mac='$HOST_MAC'" ; then
++        action=modify
++    else
++        action=add-last
++    fi
++    sudo virsh net-update "$NET_NAME" "$action" ip-dhcp-host \
++        '<host mac="'$HOST_MAC'" name="'$HOST_NAME'" ip="'$ip'"/>' \
++        --live --parent-index "$parent_index"
++}
++
++# Primary IP (required)
++_update_dhcp_host "$HOST_IP"
++
++# Optional secondary IP for dual-stack
++if [[ -n "${HOST_IP_SECONDARY}" ]]; then
++    _update_dhcp_host "$HOST_IP_SECONDARY"
+ fi
+-sudo virsh net-update $NET_NAME $action ip-dhcp-host '<host mac="'$HOST_MAC'" name="'$HOST_NAME'" ip="'$HOST_IP'"/>' --live --parent-index 0
+ 
+ # Update dnsmasq configuration
+ _dnsmasq_add_if_not_exists api.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP}
+ _dnsmasq_add_if_not_exists apps.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP}
++if [[ -n "${HOST_IP_SECONDARY}" ]]; then
++    _dnsmasq_add_if_not_exists api.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP_SECONDARY}
++    _dnsmasq_add_if_not_exists apps.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP_SECONDARY}
++fi
+ sudo systemctl reload NetworkManager.service
+diff --git a/install-config.yaml.template b/install-config.yaml.template
+index f7b6faf..333feb6 100644
+--- a/install-config.yaml.template
++++ b/install-config.yaml.template
+@@ -17,13 +17,12 @@ metadata:
+   name: CLUSTER_NAME
+ networking:
+   clusterNetwork:
+-  - cidr: CLUSTER_NETWORK
+-    hostPrefix: 23
++CLUSTER_NETWORKS_YAML
+   machineNetwork:
+-  - cidr: MACHINE_NETWORK
++MACHINE_NETWORKS_YAML
+   networkType: OVNKubernetes
+   serviceNetwork:
+-  - CLUSTER_SVC_NETWORK
++SERVICE_NETWORKS_YAML
+ platform:
+   none: {}
+ BootstrapInPlace:
+diff --git a/render-install-config.py b/render-install-config.py
+new file mode 100644
+index 0000000..a111b9b
+--- /dev/null
++++ b/render-install-config.py
+@@ -0,0 +1,131 @@
++#!/usr/bin/env python3
++
++import ipaddress
++import os
++import sys
++from typing import Optional
++
++
++def _env(name: str, default: Optional[str] = None, required: bool = False) -> str:
++    v = os.environ.get(name, default)
++    if required and (v is None or v == ""):
++        raise ValueError(f"Missing required env var: {name}")
++    return v if v is not None else ""
++
++
++def _indent_block(text: str, spaces: int) -> str:
++    prefix = " " * spaces
++    lines = text.splitlines() or [""]
++    return "\n".join(prefix + line for line in lines)
++
++
++def _stack_order(ip_stack: str) -> list[str]:
++    if ip_stack == "v4":
++        return ["v4"]
++    if ip_stack == "v6":
++        return ["v6"]
++    if ip_stack == "v4v6":
++        return ["v4", "v6"]
++    if ip_stack == "v6v4":
++        return ["v6", "v4"]
++    raise ValueError(f"Invalid IP_STACK={ip_stack}. Expected one of: v4, v6, v4v6, v6v4")
++
++
++def _require_for_stack(ip_stack: str, fam: str, name: str) -> str:
++    v = _env(f"{name}_{fam.upper()}", default="")
++    if v == "":
++        raise ValueError(f"IP_STACK={ip_stack} requires {name}_{fam.upper()} to be set")
++    return v
++
++
++def _yaml_cluster_networks(ip_stack: str, order: list[str]) -> str:
++    out: list[str] = []
++    for fam in order:
++        cidr = _require_for_stack(ip_stack, fam, "CLUSTER_NETWORK")
++        hp = _env(
++            f"CLUSTER_NETWORK_HOST_PREFIX_{fam.upper()}",
++            default="64" if fam == "v6" else "23",
++            required=False,
++        )
++        # Must match template indentation (2 spaces before list item)
++        out.append(f"  - cidr: {cidr}\n    hostPrefix: {int(hp)}")
++    return "\n".join(out)
++
++
++def _yaml_machine_networks(ip_stack: str, order: list[str]) -> str:
++    out: list[str] = []
++    for fam in order:
++        cidr = _require_for_stack(ip_stack, fam, "MACHINE_NETWORK")
++        out.append(f"  - cidr: {cidr}")
++    return "\n".join(out)
++
++
++def _yaml_service_networks(ip_stack: str, order: list[str]) -> str:
++    out: list[str] = []
++    for fam in order:
++        cidr = _require_for_stack(ip_stack, fam, "CLUSTER_SVC_NETWORK")
++        # serviceNetwork list items are scalar strings
++        out.append(f"  - {cidr}")
++    return "\n".join(out)
++
++
++def _validate_ip_families(order: list[str]) -> None:
++    # Validate that provided CIDRs are parseable and match their family.
++    for fam in order:
++        for base in ("CLUSTER_NETWORK", "MACHINE_NETWORK", "CLUSTER_SVC_NETWORK"):
++            cidr = _env(f"{base}_{fam.upper()}", "")
++            if cidr == "":
++                continue
++            n = ipaddress.ip_network(cidr, strict=False)
++            if fam == "v4" and n.version != 4:
++                raise ValueError(f"{base}_{fam.upper()} must be IPv4 CIDR, got: {cidr}")
++            if fam == "v6" and n.version != 6:
++                raise ValueError(f"{base}_{fam.upper()} must be IPv6 CIDR, got: {cidr}")
++
++
++def main() -> int:
++    template_path = sys.argv[1] if len(sys.argv) > 1 else "install-config.yaml.template"
++    output_path = sys.argv[2] if len(sys.argv) > 2 else "install-config.yaml"
++
++    base_domain = _env("BASE_DOMAIN", required=True)
++    cluster_name = _env("CLUSTER_NAME", required=True)
++    installation_disk = _env("INSTALLATION_DISK", required=True)
++    pull_secret = _env("PULL_SECRET", required=True)
++    ssh_key_pub_path = _env("SSH_KEY_PUB_PATH", required=True)
++
++    ip_stack = _env("IP_STACK", default="v4")
++    order = _stack_order(ip_stack)
++    _validate_ip_families(order)
++
++    with open(ssh_key_pub_path, "r", encoding="utf-8") as f:
++        ssh_key = f.read().strip()
++
++    with open(template_path, "r", encoding="utf-8") as f:
++        data = f.read()
++
++    data = data.replace("BASE_DOMAIN", base_domain)
++    data = data.replace("CLUSTER_NAME", cluster_name)
++    data = data.replace("INSTALLATION_DISK", installation_disk)
++
++    data = data.replace("CLUSTER_NETWORKS_YAML", _yaml_cluster_networks(ip_stack, order))
++    data = data.replace("MACHINE_NETWORKS_YAML", _yaml_machine_networks(ip_stack, order))
++    data = data.replace("SERVICE_NETWORKS_YAML", _yaml_service_networks(ip_stack, order))
++
++    # Preserve existing indentation in template for these blocks (8 spaces after the pipe)
++    data = data.replace("YOUR_PULL_SECRET", _indent_block(pull_secret, 8))
++    data = data.replace("YOUR_SSH_KEY", _indent_block(ssh_key, 8))
++
++    with open(output_path, "w", encoding="utf-8") as f:
++        f.write(data)
++
++    return 0
++
++
++if __name__ == "__main__":
++    try:
++        raise SystemExit(main())
++    except Exception as e:
++        print(f"render-install-config.py: error: {e}", file=sys.stderr)
++        raise SystemExit(1)
++
++
+diff --git a/render-net-xml.py b/render-net-xml.py
+new file mode 100644
+index 0000000..8fb7ba1
+--- /dev/null
++++ b/render-net-xml.py
+@@ -0,0 +1,135 @@
++#!/usr/bin/env python3
++
++import ipaddress
++import os
++import sys
++from typing import Optional
++
++
++def _env(name: str, default: Optional[str] = None, required: bool = False) -> str:
++    v = os.environ.get(name, default)
++    if required and (v is None or v == ""):
++        raise ValueError(f"Missing required env var: {name}")
++    return v if v is not None else ""
++
++
++def _stack_order(ip_stack: str) -> list[str]:
++    if ip_stack == "v4":
++        return ["v4"]
++    if ip_stack == "v6":
++        return ["v6"]
++    if ip_stack == "v4v6":
++        return ["v4", "v6"]
++    if ip_stack == "v6v4":
++        return ["v6", "v4"]
++    raise ValueError(f"Invalid IP_STACK={ip_stack}. Expected one of: v4, v6, v4v6, v6v4")
++
++
++def _require_cidr(ip_stack: str, fam: str) -> str:
++    v = _env(f"MACHINE_NETWORK_{fam.upper()}", default="")
++    if v == "":
++        raise ValueError(f"IP_STACK={ip_stack} requires MACHINE_NETWORK_{fam.upper()} to be set")
++    return v
++
++
++def _render_ipv4_block(cidr: str) -> str:
++    n = ipaddress.IPv4Network(cidr, strict=False)
++    # Convention: .1 gateway, .2..(broadcast-1) DHCP
++    if n.num_addresses < 4:
++        raise ValueError(f"IPv4 CIDR {cidr} is too small for gateway/DHCP range")
++    gw = str(ipaddress.IPv4Address(int(n.network_address) + 1))
++    dhcp_start = ipaddress.IPv4Address(int(n.network_address) + 2)
++    dhcp_end = ipaddress.IPv4Address(int(n.broadcast_address) - 1)
++    if dhcp_start > dhcp_end:
++        raise ValueError(f"IPv4 CIDR {cidr} is too small for gateway/DHCP range")
++    return "\n".join(
++        [
++            f"  <ip family='ipv4' address='{gw}' prefix='{n.prefixlen}'>",
++            "    <dhcp>",
++            f"      <range start='{dhcp_start}' end='{dhcp_end}'/>",
++            "    </dhcp>",
++            "  </ip>",
++        ]
++    )
++
++
++def _render_ipv6_block(cidr: str) -> str:
++    n = ipaddress.IPv6Network(cidr, strict=False)
++    # Convention: ::1 gateway, ::2..(small deterministic range) DHCP
++    if n.num_addresses < 3:
++        raise ValueError(f"IPv6 CIDR {cidr} is too small for gateway/DHCP range")
++    gw = ipaddress.IPv6Address(int(n.network_address) + 1)
++    dhcp_start = ipaddress.IPv6Address(int(n.network_address) + 2)
++
++    # Keep DHCPv6 range modest; clamp to subnet
++    last = ipaddress.IPv6Address(int(n.network_address) + (n.num_addresses - 1))
++    preferred_end = ipaddress.IPv6Address(int(n.network_address) + 0x1FFF)
++    dhcp_end = preferred_end if preferred_end <= last else last
++    if dhcp_end == last and dhcp_end > n.network_address:
++        dhcp_end = ipaddress.IPv6Address(int(dhcp_end) - 1)
++
++    if dhcp_start > dhcp_end:
++        raise ValueError(f"IPv6 CIDR {cidr} is too small for gateway/DHCP range")
++
++    return "\n".join(
++        [
++            f"  <ip family='ipv6' address='{gw}' prefix='{n.prefixlen}'>",
++            "    <dhcp>",
++            f"      <range start='{dhcp_start}' end='{dhcp_end}'/>",
++            "    </dhcp>",
++            "  </ip>",
++        ]
++    )
++
++
++def main() -> int:
++    out_path = sys.argv[1] if len(sys.argv) > 1 else "net.xml"
++
++    net_name = _env("NET_NAME", required=True)
++    net_uuid = _env("NET_UUID", required=True)
++    bridge = _env("NET_BRIDGE_NAME", required=True)
++    mac = _env("NET_MAC", required=True)
++    base_domain = _env("BASE_DOMAIN", required=True)
++
++    ip_stack = _env("IP_STACK", default="v4")
++    order = _stack_order(ip_stack)
++
++    ip_blocks: list[str] = []
++    for fam in order:
++        cidr = _require_cidr(ip_stack, fam)
++        if fam == "v4":
++            ip_blocks.append(_render_ipv4_block(cidr))
++        else:
++            ip_blocks.append(_render_ipv6_block(cidr))
++
++    xml = "\n".join(
++        [
++            "<network>",
++            f"  <name>{net_name}</name>",
++            f"  <uuid>{net_uuid}</uuid>",
++            "  <forward mode='nat'/>",
++            f"  <bridge name='{bridge}' stp='on' delay='0'/>",
++            "  <mtu size='1500'/>",
++            f"  <mac address='{mac}'/>",
++            f"  <domain name='{base_domain}' localOnly='yes'/>",
++            "  <dns enable='yes'/>",
++            *ip_blocks,
++            "</network>",
++            "",
++        ]
++    )
++
++    with open(out_path, "w", encoding="utf-8") as f:
++        f.write(xml)
++
++    return 0
++
++
++if __name__ == "__main__":
++    try:
++        raise SystemExit(main())
++    except Exception as e:
++        print(f"render-net-xml.py: error: {e}", file=sys.stderr)
++        raise SystemExit(1)
++
++
+-- 
+2.43.5
+
+
+From c26c7f1fe295152825dd5ebdd4a9e425aaa0ad80 Mon Sep 17 00:00:00 2001
+From: Dan Manor <dmanor@redhat.com>
+Date: Wed, 21 Jan 2026 07:01:56 -0500
+Subject: [PATCH 2/2] Use primary IP only for api/apps DNS records in
+ dual-stack
+
+---
+ host-net-config.sh | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/host-net-config.sh b/host-net-config.sh
+index de25d1a..52b1ec9 100755
+--- a/host-net-config.sh
++++ b/host-net-config.sh
+@@ -64,8 +64,4 @@ fi
+ # Update dnsmasq configuration
+ _dnsmasq_add_if_not_exists api.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP}
+ _dnsmasq_add_if_not_exists apps.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP}
+-if [[ -n "${HOST_IP_SECONDARY}" ]]; then
+-    _dnsmasq_add_if_not_exists api.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP_SECONDARY}
+-    _dnsmasq_add_if_not_exists apps.${CLUSTER_NAME}.${BASE_DOMAIN} ${HOST_IP_SECONDARY}
+-fi
+ sudo systemctl reload NetworkManager.service
+-- 
+2.43.5
+

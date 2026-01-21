@@ -1,7 +1,9 @@
 ## Image Based Installation
 IBI_VM_NAME ?= ibi
-IBI_VM_IP ?= 192.168.127.74
-IBI_VM_NETWORK ?= 192.168.127.0/24
+IBI_VM_IP_V4 ?= 192.168.127.74
+IBI_VM_IP_V6 ?= fd00:127::74
+IBI_VM_NETWORK_V4 ?= $(NET_TARGET_NETWORK_V4)
+IBI_VM_NETWORK_V6 ?= $(NET_TARGET_NETWORK_V6)
 IBI_VM_MAC ?= fa:ba:da:1b:11:b1
 IBI_VM_RAM_MB ?= $(RAM_MB)
 IBI_VM_CPUS ?= $(CPU_CORE)
@@ -27,6 +29,7 @@ IBI_CONFIG_TEMPLATE = image-based-config-template.yaml
 ifdef DHCP
     IBI_CONFIG_TEMPLATE = image-based-config-template-dhcp.yaml
 endif
+
 
 
 ifeq ($(PRECACHE_MODE),directory)
@@ -59,7 +62,8 @@ ibi-iso-clean:
 # Configure dhcp and dns for host
 .PHONY: host-net-config
 host-net-config:
-	HOST_IP=$(IBI_VM_IP) \
+	HOST_IP=$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) \
+	HOST_IP_SECONDARY=$(if $(STACK_SECONDARY_FAM),$(IBI_VM_IP_$(STACK_SECONDARY_FAM)),) \
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
 	BASE_DOMAIN=$(IBI_DOMAIN) \
 	NET_NAME=$(IBI_NET_NAME) \
@@ -85,21 +89,27 @@ ibi-vm-remove: vm-remove ## Remove IBI VM and the storage associated with it
 .PHONY: logs
 ibi-logs: ## Show logs of the IBI installation process
 	echo "Waiting for $(IBI_VM_NAME) to be accessible"
-	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP) true; do sleep 5; echo -n .; done; echo
-	ssh $(SSH_FLAGS) core@$(IBI_VM_IP) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
+	@until ssh $(SSH_FLAGS) core@$(call ip_for_ssh,$(IBI_VM_IP_$(STACK_PRIMARY_FAM))) true; do sleep 5; echo -n .; done; echo
+	ssh $(SSH_FLAGS) core@$(call ip_for_ssh,$(IBI_VM_IP_$(STACK_PRIMARY_FAM))) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
 
 .PHONY: image-based-installation-config.yaml
 image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-installation-config.yaml
 	$(info Creating IBI image-based-installation-config.yaml)
 	@mkdir -p $(IBI_WORK_DIR)
-	@< $(IBI_INSTALLATION_CONFIG_TEMPLATE) \
-		SEED_IMAGE=$(SEED_IMAGE) \
-		SEED_VERSION=$(SEED_VERSION) \
-		PULL_SECRET='$(PULL_SECRET)' \
-		INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
-		IBI_EXTRA_PARTITION_START='$(IBI_EXTRA_PARTITION_START)' \
-		SSH_KEY='$(shell cat $(SSH_KEY))' \
-		envsubst > $(IBI_WORK_DIR)/image-based-installation-config.yaml
+	@SEED_IMAGE="$(SEED_IMAGE)" \
+	SEED_VERSION="$(SEED_VERSION)" \
+	PULL_SECRET='$(PULL_SECRET)' \
+	INSTALLATION_DISK="$(IBI_INSTALLATION_DISK)" \
+	IBI_EXTRA_PARTITION_START='$(IBI_EXTRA_PARTITION_START)' \
+	SSH_KEY="$$(cat "$(SSH_KEY)")" \
+	DHCP="$(DHCP)" \
+	IP_STACK="$(IP_STACK)" \
+	HOST_MAC="$(IBI_VM_MAC)" \
+	HOST_IP_V4="$(IBI_VM_IP_V4)" \
+	HOST_IP_V6="$(IBI_VM_IP_V6)" \
+	MACHINE_NETWORK_V4="$(IBI_VM_NETWORK_V4)" \
+	MACHINE_NETWORK_V6="$(IBI_VM_NETWORK_V6)" \
+	python3 $(IMAGE_BASED_DIR)/scripts/render-image-based-installation-config.py > $(IBI_WORK_DIR)/image-based-installation-config.yaml
 
 .PHONY: ibi-install-config
 ibi-install-config: $(SSH_KEY_PRIV_PATH)
@@ -112,20 +122,31 @@ ibi-install-config: $(SSH_KEY_PRIV_PATH)
 	INSTALLATION_DISK=$(IBI_INSTALLATION_DISK) \
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
 	BASE_DOMAIN=$(IBI_DOMAIN) \
-	MACHINE_NETWORK=$(IBI_VM_NETWORK) \
+	IP_STACK=$(IP_STACK) \
+	MACHINE_NETWORK_V4=$(IBI_VM_NETWORK_V4) \
+	MACHINE_NETWORK_V6=$(IBI_VM_NETWORK_V6) \
+	CLUSTER_NETWORK_V4=$(CLUSTER_NETWORK_V4) \
+	CLUSTER_NETWORK_V6=$(CLUSTER_NETWORK_V6) \
+	CLUSTER_SVC_NETWORK_V4=$(CLUSTER_SVC_NETWORK_V4) \
+	CLUSTER_SVC_NETWORK_V6=$(CLUSTER_SVC_NETWORK_V6) \
+	CLUSTER_NETWORK_HOST_PREFIX_V4=$(CLUSTER_NETWORK_HOST_PREFIX_V4) \
+	CLUSTER_NETWORK_HOST_PREFIX_V6=$(CLUSTER_NETWORK_HOST_PREFIX_V6) \
 		make -C $(SNO_DIR) ../$(IBI_WORK_DIR)/install-config.yaml
 
 .PHONY: ibi-imagebased-config
 ibi-imagebased-config:
 	$(info Creating IBI image-based-config.yaml)
 	@mkdir -p $(IBI_WORK_DIR)
-	@< $(IBI_CONFIG_TEMPLATE) \
-		VM_NAME=$(IBI_VM_NAME) \
-		HOST_IP=$(IBI_VM_IP) \
-		HOST_MAC=$(IBI_VM_MAC) \
-		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(IBI_NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
-		RELEASE_REGISTRY=$(IBI_RELEASE_REGISTRY) \
-		envsubst > $(IBI_WORK_DIR)/image-based-config.yaml
+	@VM_NAME="$(IBI_VM_NAME)" \
+	HOST_MAC="$(IBI_VM_MAC)" \
+	DHCP="$(DHCP)" \
+	IP_STACK="$(IP_STACK)" \
+	HOST_IP_V4="$(IBI_VM_IP_V4)" \
+	HOST_IP_V6="$(IBI_VM_IP_V6)" \
+	MACHINE_NETWORK_V4="$(IBI_VM_NETWORK_V4)" \
+	MACHINE_NETWORK_V6="$(IBI_VM_NETWORK_V6)" \
+	RELEASE_REGISTRY="$(IBI_RELEASE_REGISTRY)" \
+	python3 $(IMAGE_BASED_DIR)/scripts/render-image-based-config.py > $(IBI_WORK_DIR)/image-based-config.yaml
 
 .PHONY: imagebasedconfig.iso
 imagebasedconfig.iso: RELEASE_VERSION=$(SEED_VERSION)
