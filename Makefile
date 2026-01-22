@@ -16,6 +16,13 @@ include network.env
 
 default: help
 
+.PHONY: check-ip-stack
+check-ip-stack:
+	@if [[ "$(IP_STACK)" != "v4" && "$(IP_STACK)" != "v6" && "$(IP_STACK)" != "v4v6" && "$(IP_STACK)" != "v6v4" ]]; then \
+		echo "ERROR: Invalid IP_STACK=$(IP_STACK). Expected one of: v4, v6, v4v6, v6v4" >&2; \
+		exit 1; \
+	fi
+
 .PHONY: checkenv
 checkenv:
 ifndef PULL_SECRET
@@ -32,13 +39,25 @@ virsh = sudo virsh --connect=$(VIRSH_CONNECT)
 
 SEED_VM_NAME  ?= seed
 SEED_DOMAIN ?= $(NET_SEED_DOMAIN)
-SEED_VM_IP  ?= 192.168.126.10
+IP_STACK ?= v4
+
+# Cluster/service network defaults (override as needed)
+CLUSTER_NETWORK_V4 ?= 10.128.0.0/14
+CLUSTER_NETWORK_V6 ?= fd01::/48
+CLUSTER_SVC_NETWORK_V4 ?= 172.30.0.0/16
+CLUSTER_SVC_NETWORK_V6 ?= fd02::/112
+CLUSTER_NETWORK_HOST_PREFIX_V4 ?= 23
+CLUSTER_NETWORK_HOST_PREFIX_V6 ?= 64
+
+SEED_VM_IP_V4  ?= 192.168.126.10
+SEED_VM_IP_V6  ?= fd00:126::10
 SEED_VERSION ?= 4.15.2
 SEED_MAC ?= 52:54:00:ee:42:e1
 
 TARGET_VM_NAME ?= target
 TARGET_DOMAIN ?= $(NET_TARGET_DOMAIN)
-TARGET_VM_IP  ?= 192.168.127.99
+TARGET_VM_IP_V4  ?= 192.168.127.99
+TARGET_VM_IP_V6  ?= fd00:127::99
 TARGET_VERSION ?= 4.14.14
 TARGET_MAC ?= 52:54:00:fa:ba:da
 
@@ -70,8 +89,13 @@ SSH_FLAGS = -o IdentityFile=$(SSH_KEY_PRIV_PATH) \
  			-o UserKnownHostsFile=/dev/null \
  			-o StrictHostKeyChecking=no
 
-HOST_IP ?= $(SEED_VM_IP)
-SSH_HOST = core@$(HOST_IP)
+STACK_PRIMARY_FAM = $(if $(filter v6 v6v4,$(IP_STACK)),V6,V4)
+STACK_SECONDARY_FAM = $(if $(filter v4v6,$(IP_STACK)),V6,$(if $(filter v6v4,$(IP_STACK)),V4,))
+ip_for_ssh = $(if $(findstring :,$(1)),[$(1)],$(1))
+
+HOST_IP ?= $(SEED_VM_IP_$(STACK_PRIMARY_FAM))
+HOST_IP_SECONDARY ?= $(if $(STACK_SECONDARY_FAM),$(SEED_VM_IP_$(STACK_SECONDARY_FAM)),)
+SSH_HOST = core@$(call ip_for_ssh,$(HOST_IP))
 
 # Default cluster is seed cluster, you can change easily by setting CLUSTER=target on the command line
 CLUSTER ?= $(SEED_VM_NAME)
@@ -99,6 +123,26 @@ bip-orchestrate-vm:
 	else \
 		git clone https://github.com/rh-ecosystem-edge/bip-orchestrate-vm ;\
 	fi
+
+.PHONY: bip-orchestrate-vm-apply-patches
+bip-orchestrate-vm-apply-patches: bip-orchestrate-vm
+	@set -euo pipefail; \
+	repo="$(SNO_DIR)"; \
+	patch_dir="$$(realpath "$(IMAGE_BASED_DIR)/patches")"; \
+	if [ ! -d "$$repo/.git" ]; then \
+		echo "ERROR: $$repo is not a git repo; run 'make bip-orchestrate-vm' first" >&2; \
+		exit 1; \
+	fi; \
+	# Always start from a clean upstream base, then re-apply patches. \
+	if ls -1 "$$patch_dir"/*.patch >/dev/null 2>&1; then \
+		echo "Applying patches from $$patch_dir to $$repo..."; \
+		git -C "$$repo" am --3way --keep-cr --whitespace=nowarn "$$patch_dir"/*.patch; \
+	else \
+		echo "No patches found under $$patch_dir; skipping"; \
+	fi
+
+.PHONY: bip-orchestrate-vm-patched
+bip-orchestrate-vm-patched: bip-orchestrate-vm-apply-patches
 
 .PHONY: lifecycle-agent
 lifecycle-agent:
@@ -154,7 +198,7 @@ sno-upgrade: lca-stage-idle lca-stage-prep lca-wait-for-prep lca-stage-upgrade l
 
 .PHONY: seed-vm-create
 seed-vm-create: VM_NAME=$(SEED_VM_NAME)
-seed-vm-create: HOST_IP=$(SEED_VM_IP)
+seed-vm-create: HOST_IP=$(SEED_VM_IP_$(STACK_PRIMARY_FAM))
 seed-vm-create: RELEASE_VERSION=$(SEED_VERSION)
 seed-vm-create: RELEASE_IMAGE=$(SEED_RELEASE_IMAGE)
 seed-vm-create: MAC_ADDRESS=$(SEED_MAC)
@@ -163,7 +207,10 @@ seed-vm-create: NET_NAME=$(NET_SEED_NAME)
 seed-vm-create: NET_BRIDGE_NAME=$(NET_SEED_BRIDGE_NAME)
 seed-vm-create: NET_MAC=$(NET_SEED_MAC)
 seed-vm-create: NET_UUID=$(NET_SEED_UUID)
-seed-vm-create: MACHINE_NETWORK=$(NET_SEED_NETWORK)
+seed-vm-create: HOST_IP_V4=$(SEED_VM_IP_V4)
+seed-vm-create: HOST_IP_V6=$(SEED_VM_IP_V6)
+seed-vm-create: MACHINE_NETWORK_V4=$(NET_SEED_NETWORK_V4)
+seed-vm-create: MACHINE_NETWORK_V6=$(NET_SEED_NETWORK_V6)
 seed-vm-create: start-iso-abi ## Install seed SNO cluster
 
 .PHONY: wait-for-seed
@@ -171,7 +218,7 @@ wait-for-seed: CLUSTER=$(SEED_VM_NAME)
 wait-for-seed: wait-for-install-complete ## Wait for seed cluster to complete installation
 
 .PHONY: seed-ssh
-seed-ssh: HOST_IP=$(SEED_VM_IP)
+seed-ssh: HOST_IP=$(SEED_VM_IP_$(STACK_PRIMARY_FAM))
 seed-ssh: ssh ## ssh into seed VM
 
 .PHONY: seed-vm-backup
@@ -215,7 +262,7 @@ generate-dnsmasq-site-policy-section.sh:
 .PHONY: dnsmasq-workaround
 # dnsmasq workaround until https://github.com/openshift/assisted-service/pull/5658 is in assisted
 dnsmasq-workaround: generate-dnsmasq-site-policy-section.sh
-	./generate-dnsmasq-site-policy-section.sh --name $(SEED_VM_NAME) --domain $(NET_SEED_DOMAIN) --ip $(SEED_VM_IP) --mc | $(oc) apply -f -
+	./generate-dnsmasq-site-policy-section.sh --name $(SEED_VM_NAME) --domain $(NET_SEED_DOMAIN) --ip $(SEED_VM_IP_$(STACK_PRIMARY_FAM)) --mc | $(oc) apply -f -
 
 .PHONY: vdu
 vdu: ## Apply VDU profile to seed VM
@@ -225,7 +272,7 @@ vdu: ## Apply VDU profile to seed VM
 ## Target VM management
 .PHONY: target-vm-create
 target-vm-create: VM_NAME=$(TARGET_VM_NAME)
-target-vm-create: HOST_IP=$(TARGET_VM_IP)
+target-vm-create: HOST_IP=$(TARGET_VM_IP_$(STACK_PRIMARY_FAM))
 target-vm-create: RELEASE_VERSION=$(TARGET_VERSION)
 target-vm-create: RELEASE_IMAGE=$(TARGET_RELEASE_IMAGE)
 target-vm-create: MAC_ADDRESS=$(TARGET_MAC)
@@ -234,7 +281,10 @@ target-vm-create: NET_NAME=$(NET_TARGET_NAME)
 target-vm-create: NET_BRIDGE_NAME=$(NET_TARGET_BRIDGE_NAME)
 target-vm-create: NET_MAC=$(NET_TARGET_MAC)
 target-vm-create: NET_UUID=$(NET_TARGET_UUID)
-target-vm-create: MACHINE_NETWORK=$(NET_TARGET_NETWORK)
+target-vm-create: HOST_IP_V4=$(TARGET_VM_IP_V4)
+target-vm-create: HOST_IP_V6=$(TARGET_VM_IP_V6)
+target-vm-create: MACHINE_NETWORK_V4=$(NET_TARGET_NETWORK_V4)
+target-vm-create: MACHINE_NETWORK_V6=$(NET_TARGET_NETWORK_V6)
 target-vm-create: start-iso-abi ## Install target SNO cluster
 
 .PHONY: wait-for-target
@@ -242,7 +292,7 @@ wait-for-target: CLUSTER=$(TARGET_VM_NAME)
 wait-for-target: wait-for-install-complete ## Wait for target cluster to complete installation
 
 .PHONY: target-ssh
-target-ssh: HOST_IP=$(TARGET_VM_IP)
+target-ssh: HOST_IP=$(TARGET_VM_IP_$(STACK_PRIMARY_FAM))
 target-ssh: ssh ## ssh into target VM
 
 .PHONY: target-vm-backup
@@ -295,20 +345,32 @@ lca-logs: CLUSTER=$(TARGET_VM_NAME)
 lca-logs: ## Tail through LifeCycle Agent logs	make lca-logs CLUSTER=seed
 	$(oc) logs -f -c manager -n openshift-lifecycle-agent -l app.kubernetes.io/component=lifecycle-agent
 
-start-iso-abi: checkenv bip-orchestrate-vm check-old-net network
+start-iso-abi: checkenv check-ip-stack bip-orchestrate-vm-patched check-old-net network
 	if [[ "$(PRECACHE_MODE)" == "partition" ]]; then \
 		cp 98_varlibcontainers_as_partition.yaml $(SNO_DIR)/manifests; \
 	fi
-	@< $(AGENT_CONFIG_TEMPLATE) \
-		VM_NAME=$(VM_NAME) \
-		HOST_IP=$(HOST_IP) \
-		HOST_MAC=$(MAC_ADDRESS) \
-		HOST_ROUTE=$(shell $(virsh) net-dumpxml $(NET_NAME) | grep '<ip ' | xargs -n1 | grep address | cut -d = -f 2) \
-		envsubst > $(shell pwd)/agent-config-$(VM_NAME).yaml
+	@VM_NAME="$(VM_NAME)" \
+	HOST_MAC="$(MAC_ADDRESS)" \
+	DHCP="$(DHCP)" \
+	IP_STACK="$(IP_STACK)" \
+	HOST_IP_V4="$(HOST_IP_V4)" \
+	HOST_IP_V6="$(HOST_IP_V6)" \
+	MACHINE_NETWORK_V4="$(MACHINE_NETWORK_V4)" \
+	MACHINE_NETWORK_V6="$(MACHINE_NETWORK_V6)" \
+	python3 $(IMAGE_BASED_DIR)/scripts/render-agent-config.py > $(shell pwd)/agent-config-$(VM_NAME).yaml
 	make -C $(SNO_DIR) $@ \
 		VM_NAME=$(VM_NAME) \
-		HOST_IP=$(HOST_IP) \
-		MACHINE_NETWORK=$(MACHINE_NETWORK) \
+		IP_STACK=$(IP_STACK) \
+		HOST_IP_V4=$(HOST_IP_V4) \
+		HOST_IP_V6=$(HOST_IP_V6) \
+		MACHINE_NETWORK_V4=$(MACHINE_NETWORK_V4) \
+		MACHINE_NETWORK_V6=$(MACHINE_NETWORK_V6) \
+		CLUSTER_NETWORK_V4=$(CLUSTER_NETWORK_V4) \
+		CLUSTER_NETWORK_V6=$(CLUSTER_NETWORK_V6) \
+		CLUSTER_SVC_NETWORK_V4=$(CLUSTER_SVC_NETWORK_V4) \
+		CLUSTER_SVC_NETWORK_V6=$(CLUSTER_SVC_NETWORK_V6) \
+		CLUSTER_NETWORK_HOST_PREFIX_V4=$(CLUSTER_NETWORK_HOST_PREFIX_V4) \
+		CLUSTER_NETWORK_HOST_PREFIX_V6=$(CLUSTER_NETWORK_HOST_PREFIX_V6) \
 		CLUSTER_NAME=$(VM_NAME) \
 		HOST_MAC=$(MAC_ADDRESS) \
 		AGENT_CONFIG=$(shell pwd)/agent-config-$(VM_NAME).yaml \
@@ -333,7 +395,8 @@ seed-network: NET_NAME=$(NET_SEED_NAME)
 seed-network: NET_UUID=$(NET_SEED_UUID)
 seed-network: NET_BRIDGE_NAME=$(NET_SEED_BRIDGE_NAME)
 seed-network: NET_MAC=$(NET_SEED_MAC)
-seed-network: MACHINE_NETWORK=$(NET_SEED_NETWORK)
+seed-network: MACHINE_NETWORK_V4=$(NET_SEED_NETWORK_V4)
+seed-network: MACHINE_NETWORK_V6=$(NET_SEED_NETWORK_V6)
 seed-network: BASE_DOMAIN=$(NET_SEED_DOMAIN)
 seed-network: network
 
@@ -342,18 +405,22 @@ target-network: NET_NAME=$(NET_TARGET_NAME)
 target-network: NET_UUID=$(NET_TARGET_UUID)
 target-network: NET_BRIDGE_NAME=$(NET_TARGET_BRIDGE_NAME)
 target-network: NET_MAC=$(NET_TARGET_MAC)
-target-network: MACHINE_NETWORK=$(NET_TARGET_NETWORK)
+target-network: MACHINE_NETWORK_V4=$(NET_TARGET_NETWORK_V4)
+target-network: MACHINE_NETWORK_V6=$(NET_TARGET_NETWORK_V6)
 target-network: BASE_DOMAIN=$(NET_TARGET_DOMAIN)
 target-network: network
 
 # Call network creation in bip-orchestrate-vm repo
 network: check-old-net
+network: bip-orchestrate-vm-patched
 	make -C $(SNO_DIR) $@ \
 		NET_NAME=$(NET_NAME) \
 		NET_UUID=$(NET_UUID) \
 		NET_BRIDGE_NAME=$(NET_BRIDGE_NAME) \
 		NET_MAC=$(NET_MAC) \
-		MACHINE_NETWORK=$(MACHINE_NETWORK) \
+		IP_STACK=$(IP_STACK) \
+		MACHINE_NETWORK_V4=$(MACHINE_NETWORK_V4) \
+		MACHINE_NETWORK_V6=$(MACHINE_NETWORK_V6) \
 		BASE_DOMAIN=$(BASE_DOMAIN)
 
 .PHONY: wait-for-install-complete

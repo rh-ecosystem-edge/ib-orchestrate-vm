@@ -23,6 +23,7 @@ export BACKUP_SECRET=$(jq -c . /path/to/my/repo/credentials.json)
 # Optional variables
 export SSH_KEY=~/.ssh/id_rsa.pub
 export IBI_INSTALLATION_DISK=/dev/vda
+export IP_STACK=v4        # v4|v6|v4v6|v6v4 (dual-stack supported)
 ```
 
 2. Prepare a coreos live iso with a custom ignition
