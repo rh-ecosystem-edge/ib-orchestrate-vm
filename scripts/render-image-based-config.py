@@ -89,6 +89,7 @@ def main() -> int:
             [
                 "      ipv4:",
                 "        enabled: true",
+                "        dhcp: false",
                 "        address:",
                 f"          - ip: {host_ip_v4}",
                 f"            prefix-length: {_prefixlen_for_cidr(mn_v4)}",
@@ -111,6 +112,8 @@ def main() -> int:
             [
                 "      ipv6:",
                 "        enabled: true",
+                "        dhcp: false",
+                "        autoconf: false",
                 "        address:",
                 f"          - ip: {host_ip_v6}",
                 f"            prefix-length: {_prefixlen_for_cidr(mn_v6)}",

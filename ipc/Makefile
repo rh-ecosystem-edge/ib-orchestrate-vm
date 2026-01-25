@@ -50,9 +50,15 @@ IPC_DNSMASQ_CONF ?= /etc/NetworkManager/dnsmasq.d/bip.conf
 
 ARTIFACT_DIR ?= $(IPC_WORK_DIR)/artifacts
 
+# Prefer the primary IP family in dual-stack, following the repo-wide IP_STACK convention.
+# If IP_STACK is unset, default to IPv4 primary (backwards compatible).
+IPC_STACK_PRIMARY_FAM ?= $(if $(filter v6 v6v4,$(IP_STACK)),V6,V4)
+IPC_HOST_IP_PRIMARY ?= $(if $(filter V6,$(IPC_STACK_PRIMARY_FAM)),$(IPC_IPV6_ADDRESS),$(IPC_IPV4_ADDRESS))
+
 .PHONY: ipc-host-dns-update
 ipc-host-dns-update: ## Update host dnsmasq api/apps records to the new IP (restarts NetworkManager)
-	@HOST_IP="$(or $(IPC_IPV4_ADDRESS),$(IPC_IPV6_ADDRESS))" \
+	@HOST_IP="$(or $(IPC_HOST_IP_PRIMARY),$(IPC_IPV4_ADDRESS),$(IPC_IPV6_ADDRESS))" \
+	IP_STACK="$(IP_STACK)" \
 	IPC_IPV4_ADDRESS="$(IPC_IPV4_ADDRESS)" \
 	IPC_IPV6_ADDRESS="$(IPC_IPV6_ADDRESS)" \
 	CLUSTER_NAME="$(IPC_CLUSTER_NAME)" \
@@ -64,7 +70,10 @@ ipc-host-dns-update: ## Update host dnsmasq api/apps records to the new IP (rest
 ipc-libvirt-network-refresh:
 	@NET_NAME="$(NET_TARGET_NAME)" \
 	NET_BRIDGE_NAME="$(NET_TARGET_BRIDGE_NAME)" \
-	MACHINE_NETWORK="$(or $(IPC_IPV4_MACHINE_NETWORK),$(NET_TARGET_NETWORK))" \
+	IP_STACK="$(IP_STACK)" \
+	MACHINE_NETWORK_V4="$(or $(IPC_IPV4_MACHINE_NETWORK),$(NET_TARGET_NETWORK))" \
+	MACHINE_NETWORK_V6="$(IPC_IPV6_MACHINE_NETWORK)" \
+	GATEWAY_V6="$(IPC_IPV6_GATEWAY)" \
 	VM_NAME="$(IBI_VM_NAME)" \
 	VIRSH_CONNECT="$(VIRSH_CONNECT)" \
 		bash "$(IPC_DIR)ipc-libvirt-network-refresh.sh"
