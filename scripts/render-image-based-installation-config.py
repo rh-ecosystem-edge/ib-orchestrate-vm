@@ -99,6 +99,7 @@ def _render_network_config(ip_stack: str) -> str:
                 "      ipv6:",
                 "        enabled: true",
                 "        dhcp: false",
+                "        autoconf: false",
                 "        address:",
                 f"          - ip: {host_ip_v6}",
                 f"            prefix-length: {_prefixlen_for_cidr(mn_v6)}",

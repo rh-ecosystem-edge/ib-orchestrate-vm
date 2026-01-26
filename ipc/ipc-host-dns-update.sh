@@ -8,10 +8,11 @@ set -euo pipefail
 #   BASE_DOMAIN    - OpenShift base domain (e.g. ibo1.redhat.com)
 #
 # IP selection (first non-empty wins):
-#   HOST_IP, IPC_IPV4_ADDRESS, IPC_IPV6_ADDRESS
+#   HOST_IP, (dual-stack primary from IP_STACK), IPC_IPV4_ADDRESS, IPC_IPV6_ADDRESS
 #
 # Optional env:
 #   DNSMASQ_CONF   - dnsmasq config file path (default: /etc/NetworkManager/dnsmasq.d/bip.conf)
+#   IP_STACK       - v4 / v6 / v4v6 / v6v4 (used only when both v4+v6 are set and HOST_IP is unset)
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 log() { echo "ipc-host-dns-update: $*" >&2; }
@@ -23,9 +24,21 @@ DNSMASQ_CONF="${DNSMASQ_CONF:-/etc/NetworkManager/dnsmasq.d/bip.conf}"
 HOST_IP="${HOST_IP:-}"
 IPC_IPV4_ADDRESS="${IPC_IPV4_ADDRESS:-}"
 IPC_IPV6_ADDRESS="${IPC_IPV6_ADDRESS:-}"
+IP_STACK="${IP_STACK:-}"
 
 [[ -n "${CLUSTER_NAME}" ]] || die "CLUSTER_NAME is required"
 [[ -n "${BASE_DOMAIN}" ]] || die "BASE_DOMAIN is required"
+
+if [[ -z "${HOST_IP}" ]] && [[ -n "${IPC_IPV4_ADDRESS}" ]] && [[ -n "${IPC_IPV6_ADDRESS}" ]]; then
+  case "${IP_STACK}" in
+    v6|v6v4) HOST_IP="${IPC_IPV6_ADDRESS}" ;;
+    v4|v4v6|"") HOST_IP="${IPC_IPV4_ADDRESS}" ;;
+    *)
+      log "WARN: invalid IP_STACK=${IP_STACK}; defaulting DNS record to IPC_IPV4_ADDRESS (set HOST_IP to override)"
+      HOST_IP="${IPC_IPV4_ADDRESS}"
+      ;;
+  esac
+fi
 
 if [[ -z "${HOST_IP}" ]]; then
   HOST_IP="${IPC_IPV4_ADDRESS:-}"
