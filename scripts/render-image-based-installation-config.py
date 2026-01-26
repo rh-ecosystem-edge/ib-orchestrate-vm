@@ -46,6 +46,8 @@ def _render_network_config(ip_stack: str) -> str:
     supporting v4/v6/dual-stack based on IP_STACK.
     """
     order = _stack_order(ip_stack)
+    only_v4 = order == ["v4"]
+    only_v6 = order == ["v6"]
     host_mac = _env("HOST_MAC", required=True)
 
     host_ip_v4 = _env("HOST_IP_V4", "")
@@ -114,6 +116,22 @@ def _render_network_config(ip_stack: str) -> str:
             ]
         )
 
+    # Explicitly disable the other family for single-stack.
+    if only_v4:
+        iface_lines.extend(
+            [
+                "      ipv6:",
+                "        enabled: false",
+            ]
+        )
+    if only_v6:
+        iface_lines.extend(
+            [
+                "      ipv4:",
+                "        enabled: false",
+            ]
+        )
+
     dns_lines = ["  dns-resolver:", "    config:", "      server:"]
     dns_lines.extend([f"        - {s}" for s in dns_servers])
 
@@ -148,9 +166,8 @@ def main() -> int:
         ]
     )
 
-    # DHCP mode: keep config minimal (no nmstate networkConfig).
-    if os.environ.get("DHCP", "") == "":
-        out += _render_network_config(ip_stack)
+    dhcp = os.environ.get("DHCP", "") != ""
+    out += _render_network_config(ip_stack)
 
     sys.stdout.write(out + "\n")
     return 0

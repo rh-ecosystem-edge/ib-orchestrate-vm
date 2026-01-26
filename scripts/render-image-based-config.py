@@ -41,6 +41,8 @@ def main() -> int:
     ip_stack = _env("IP_STACK", default="v4")
 
     order = _stack_order(ip_stack)
+    only_v4 = order == ["v4"]
+    only_v6 = order == ["v6"]
 
     host_ip_v4 = _env("HOST_IP_V4", default="")
     host_ip_v6 = _env("HOST_IP_V6", default="")
@@ -124,6 +126,22 @@ def main() -> int:
                 f"    - next-hop-address: {gw6}",
                 "      next-hop-interface: enp1s0",
                 "      destination: ::/0",
+            ]
+        )
+
+    # Explicitly disable the other family for single-stack.
+    if only_v4:
+        iface_lines.extend(
+            [
+                "      ipv6:",
+                "        enabled: false",
+            ]
+        )
+    if only_v6:
+        iface_lines.extend(
+            [
+                "      ipv4:",
+                "        enabled: false",
             ]
         )
 
