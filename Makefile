@@ -30,9 +30,6 @@ ifndef PULL_SECRET
 endif
 
 AGENT_CONFIG_TEMPLATE = agent-config-template.yaml
-ifdef DHCP
-    AGENT_CONFIG_TEMPLATE = agent-config-template-dhcp.yaml
-endif
 
 VIRSH_CONNECT ?= qemu:///system
 virsh = sudo virsh --connect=$(VIRSH_CONNECT)
@@ -350,7 +347,6 @@ start-iso-abi: checkenv check-ip-stack bip-orchestrate-vm-patched check-old-net 
 	fi
 	@VM_NAME="$(VM_NAME)" \
 	HOST_MAC="$(MAC_ADDRESS)" \
-	DHCP="$(DHCP)" \
 	IP_STACK="$(IP_STACK)" \
 	HOST_IP_V4="$(HOST_IP_V4)" \
 	HOST_IP_V6="$(HOST_IP_V6)" \

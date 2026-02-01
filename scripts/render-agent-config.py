@@ -54,27 +54,6 @@ def main() -> int:
     else:
         rendezvous = host_ip_v6 or _env("HOST_IP_V6", required=True)
 
-    # If DHCP mode is enabled, emit minimal agent config (no nmstate)
-    if os.environ.get("DHCP", "") != "":
-        sys.stdout.write(
-            "\n".join(
-                [
-                    "apiVersion: v1alpha1",
-                    "kind: AgentConfig",
-                    "metadata:",
-                    f"  name: {vm_name}-sno-cluster",
-                    f"rendezvousIP: {rendezvous}",
-                    "hosts:",
-                    f"  - hostname: {vm_name}",
-                    "    interfaces:",
-                    "      - name: eno1",
-                    f"        macAddress: {host_mac}",
-                    "",
-                ]
-            )
-        )
-        return 0
-
     # Static nmstate config
     iface_lines: list[str] = [
         "        - name: eno1",

@@ -1,0 +1,42 @@
+From 0ac99b22dac7ea3a4422b26495e63573796e3d64 Mon Sep 17 00:00:00 2001
+From: Dan Manor <dmanor@redhat.com>
+Date: Sun, 1 Feb 2026 03:39:19 -0500
+Subject: [PATCH] Fix _parent_index_for_family for IPv4-only networks
+
+---
+ host-net-config.sh | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/host-net-config.sh b/host-net-config.sh
+index 67c4b09..64071ab 100755
+--- a/host-net-config.sh
++++ b/host-net-config.sh
+@@ -23,13 +23,21 @@ _ip_family() {
+ 
+ _parent_index_for_family() {
+     local fam="$1"
++    # For IPv4: match <ip> tags that either have family='ipv4' OR no family attribute (ipv4 is default)
++    # For IPv6: match <ip> tags that have family='ipv6'
+     sudo virsh net-dumpxml "$NET_NAME" | awk -v fam="$fam" '
+-        BEGIN{idx=0}
+-        /<ip /{
+-            if ($0 ~ "family='\''"fam"'\''") { print idx; exit 0 }
++        BEGIN { idx=0; found=0 }
++        /<ip / {
++            if (fam == "ipv4") {
++                # IPv4: match if family=ipv4 OR no family attribute at all
++                if ($0 ~ /family=.ipv4./ || $0 !~ /family=/) { print idx; found=1; exit }
++            } else {
++                # IPv6: must have explicit family=ipv6
++                if ($0 ~ /family=.ipv6./) { print idx; found=1; exit }
++            }
+             idx++
+         }
+-        END{ exit 1 }
++        END { if (!found) exit 1 }
+     '
+ }
+ 
+-- 
+2.43.5
+

@@ -166,8 +166,9 @@ def main() -> int:
         ]
     )
 
-    dhcp = os.environ.get("DHCP", "") != ""
-    out += _render_network_config(ip_stack)
+    # IBI_DHCP mode: no networkConfig field (VM gets IP via DHCP)
+    if os.environ.get("IBI_DHCP", "") == "":
+        out += _render_network_config(ip_stack)
 
     sys.stdout.write(out + "\n")
     return 0
