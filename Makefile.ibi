@@ -86,11 +86,11 @@ ibi-vm: target-network host-net-config ## Provision IBI VM
 ibi-vm-remove: VM_NAME=$(IBI_VM_NAME)
 ibi-vm-remove: vm-remove ## Remove IBI VM and the storage associated with it
 
-.PHONY: logs
+.PHONY: ibi-logs
 ibi-logs: ## Show logs of the IBI installation process
 	echo "Waiting for $(IBI_VM_NAME) to be accessible"
-	@until ssh $(SSH_FLAGS) core@$(call ip_for_ssh,$(IBI_VM_IP_$(STACK_PRIMARY_FAM))) true; do sleep 5; echo -n .; done; echo
-	ssh $(SSH_FLAGS) core@$(call ip_for_ssh,$(IBI_VM_IP_$(STACK_PRIMARY_FAM))) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
+	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) true; do sleep 5; echo -n .; done; echo
+	ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
 
 .PHONY: image-based-installation-config.yaml
 image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-installation-config.yaml
