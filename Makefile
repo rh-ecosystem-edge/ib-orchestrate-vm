@@ -91,11 +91,10 @@ SSH_FLAGS = -o IdentityFile=$(SSH_KEY_PRIV_PATH) \
 
 STACK_PRIMARY_FAM = $(if $(filter v6 v6v4,$(IP_STACK)),V6,V4)
 STACK_SECONDARY_FAM = $(if $(filter v4v6,$(IP_STACK)),V6,$(if $(filter v6v4,$(IP_STACK)),V4,))
-ip_for_ssh = $(if $(findstring :,$(1)),[$(1)],$(1))
 
 HOST_IP ?= $(SEED_VM_IP_$(STACK_PRIMARY_FAM))
 HOST_IP_SECONDARY ?= $(if $(STACK_SECONDARY_FAM),$(SEED_VM_IP_$(STACK_SECONDARY_FAM)),)
-SSH_HOST = core@$(call ip_for_ssh,$(HOST_IP))
+SSH_HOST = core@$(HOST_IP)
 
 # Default cluster is seed cluster, you can change easily by setting CLUSTER=target on the command line
 CLUSTER ?= $(SEED_VM_NAME)
