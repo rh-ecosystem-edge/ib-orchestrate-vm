@@ -49,8 +49,8 @@ def main() -> int:
     mn_v4 = _env("MACHINE_NETWORK_V4", default="")
     mn_v6 = _env("MACHINE_NETWORK_V6", default="")
 
-    # DHCP mode: no static routes or DNS; interface stanza only
-    if os.environ.get("DHCP", "") != "":
+    # IBI_DHCP mode: no static routes or DNS; interface stanza only
+    if os.environ.get("IBI_DHCP", "") != "":
         sys.stdout.write(
             "\n".join(
                 [

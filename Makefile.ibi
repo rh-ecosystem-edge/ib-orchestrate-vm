@@ -26,7 +26,7 @@ IBI_RELEASE_REGISTRY ?= ""
 IBI_RELEASE_IMAGE ?= $(DEFAULT_RELEASE_IMAGE)
 IBI_INSTALLATION_CONFIG_TEMPLATE = image-based-installation-config-template.yaml
 IBI_CONFIG_TEMPLATE = image-based-config-template.yaml
-ifdef DHCP
+ifdef IBI_DHCP
     IBI_CONFIG_TEMPLATE = image-based-config-template-dhcp.yaml
 endif
 
@@ -59,9 +59,11 @@ ibi-iso: $(SSH_KEY_PRIV_PATH) $(OPENSHIFT_INSTALLER_BIN) credentials/pull-secret
 ibi-iso-clean:
 	-sudo rm -rf $(IBI_RHCOS_ISO_PATH) $(IBI_WORK_DIR)
 
-# Configure dhcp and dns for host
+# Configure dhcp and dns for host (static IP mode only)
+# In IBI_DHCP mode, use host-net-config-dhcp after VM boots
 .PHONY: host-net-config
 host-net-config:
+ifndef IBI_DHCP
 	HOST_IP=$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) \
 	HOST_IP_SECONDARY=$(if $(STACK_SECONDARY_FAM),$(IBI_VM_IP_$(STACK_SECONDARY_FAM)),) \
 	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
@@ -70,6 +72,24 @@ host-net-config:
 	HOST_NAME=$(IBI_VM_NAME) \
 	HOST_MAC=$(IBI_VM_MAC) \
 	$(SNO_DIR)/host-net-config.sh
+endif
+
+# Configure DNS for host after VM gets DHCP IP (IBI_DHCP mode only)
+.PHONY: host-net-config-dhcp
+host-net-config-dhcp:
+ifdef IBI_DHCP
+	@echo "Waiting for $(IBI_VM_NAME) to get DHCP IP (timeout 180s)..."
+	@IBI_DHCP_IP=$$(VM_NAME=$(IBI_VM_NAME) NET_NAME=$(IBI_NET_NAME) HOST_MAC=$(IBI_VM_MAC) IP_STACK=$(IP_STACK) WAIT_FOR_IP=1 WAIT_TIMEOUT=180 python3 $(IMAGE_BASED_DIR)/scripts/get-vm-ip.py) && \
+	if [ -z "$$IBI_DHCP_IP" ]; then echo "ERROR: Could not get DHCP IP for $(IBI_VM_NAME)" >&2; exit 1; fi && \
+	echo "Got DHCP IP: $$IBI_DHCP_IP" && \
+	HOST_IP=$$IBI_DHCP_IP \
+	CLUSTER_NAME=$(IBI_CLUSTER_NAME) \
+	BASE_DOMAIN=$(IBI_DOMAIN) \
+	NET_NAME=$(IBI_NET_NAME) \
+	HOST_NAME=$(IBI_VM_NAME) \
+	HOST_MAC=$(IBI_VM_MAC) \
+	$(SNO_DIR)/host-net-config.sh
+endif
 
 .PHONY: ibi-vm
 ibi-vm: target-network host-net-config ## Provision IBI VM
@@ -81,16 +101,49 @@ ibi-vm: target-network host-net-config ## Provision IBI VM
 	HOST_MAC=$(IBI_VM_MAC) \
 	RAM_MB=$(IBI_VM_RAM_MB) \
 	$(SNO_DIR)/virt-install-sno-iso-ign.sh
+ifdef IBI_DHCP
+	@$(MAKE) host-net-config-dhcp
+endif
 
 .PHONY: ibi-vm-remove
 ibi-vm-remove: VM_NAME=$(IBI_VM_NAME)
 ibi-vm-remove: vm-remove ## Remove IBI VM and the storage associated with it
 
+# Get IBI VM IP
+.PHONY: ibi-get-ip
+ibi-get-ip: ## Print the IBI VM IP address
+ifdef IBI_DHCP
+	@VM_NAME=$(IBI_VM_NAME) NET_NAME=$(IBI_NET_NAME) HOST_MAC=$(IBI_VM_MAC) IP_STACK=$(IP_STACK) python3 $(IMAGE_BASED_DIR)/scripts/get-vm-ip.py
+else
+	@echo $(IBI_VM_IP_$(STACK_PRIMARY_FAM))
+endif
+
+# SSH into IBI VM
+.PHONY: ibi-ssh
+ibi-ssh: $(SSH_KEY_PRIV_PATH) ## SSH into IBI VM
+ifdef IBI_DHCP
+	@IBI_SSH_IP=$$(VM_NAME=$(IBI_VM_NAME) NET_NAME=$(IBI_NET_NAME) HOST_MAC=$(IBI_VM_MAC) IP_STACK=$(IP_STACK) python3 $(IMAGE_BASED_DIR)/scripts/get-vm-ip.py) && \
+	if [ -z "$$IBI_SSH_IP" ]; then echo "ERROR: Could not get DHCP IP for $(IBI_VM_NAME)" >&2; exit 1; fi && \
+	ssh $(SSH_FLAGS) core@$$IBI_SSH_IP
+else
+	ssh $(SSH_FLAGS) core@$(call ip_for_ssh,$(IBI_VM_IP_$(STACK_PRIMARY_FAM)))
+endif
+
 .PHONY: ibi-logs
 ibi-logs: ## Show logs of the IBI installation process
-	echo "Waiting for $(IBI_VM_NAME) to be accessible"
+ifdef IBI_DHCP
+	@echo "Waiting for $(IBI_VM_NAME) to get DHCP IP (timeout 300s)..."
+	@IBI_LOG_IP=$$(VM_NAME=$(IBI_VM_NAME) NET_NAME=$(IBI_NET_NAME) HOST_MAC=$(IBI_VM_MAC) IP_STACK=$(IP_STACK) WAIT_FOR_IP=1 WAIT_TIMEOUT=300 python3 $(IMAGE_BASED_DIR)/scripts/get-vm-ip.py) && \
+	if [ -z "$$IBI_LOG_IP" ]; then echo "ERROR: Could not get DHCP IP for $(IBI_VM_NAME)" >&2; exit 1; fi && \
+	echo "Got DHCP IP: $$IBI_LOG_IP" && \
+	echo "Waiting for $(IBI_VM_NAME) to be accessible" && \
+	until ssh $(SSH_FLAGS) core@$$IBI_LOG_IP true 2>/dev/null; do sleep 5; echo -n .; done && echo && \
+	ssh $(SSH_FLAGS) core@$$IBI_LOG_IP "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
+else
+	@echo "Waiting for $(IBI_VM_NAME) to be accessible"
 	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) true; do sleep 5; echo -n .; done; echo
 	ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
+endif
 
 .PHONY: image-based-installation-config.yaml
 image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based-installation-config.yaml
@@ -102,7 +155,7 @@ image-based-installation-config.yaml: $(SSH_KEY_PRIV_PATH) ## Create image-based
 	INSTALLATION_DISK="$(IBI_INSTALLATION_DISK)" \
 	IBI_EXTRA_PARTITION_START='$(IBI_EXTRA_PARTITION_START)' \
 	SSH_KEY="$$(cat "$(SSH_KEY)")" \
-	DHCP="$(DHCP)" \
+	IBI_DHCP="$(IBI_DHCP)" \
 	IP_STACK="$(IP_STACK)" \
 	HOST_MAC="$(IBI_VM_MAC)" \
 	HOST_IP_V4="$(IBI_VM_IP_V4)" \
@@ -139,7 +192,7 @@ ibi-imagebased-config:
 	@mkdir -p $(IBI_WORK_DIR)
 	@VM_NAME="$(IBI_VM_NAME)" \
 	HOST_MAC="$(IBI_VM_MAC)" \
-	DHCP="$(DHCP)" \
+	IBI_DHCP="$(IBI_DHCP)" \
 	IP_STACK="$(IP_STACK)" \
 	HOST_IP_V4="$(IBI_VM_IP_V4)" \
 	HOST_IP_V6="$(IBI_VM_IP_V6)" \

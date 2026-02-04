@@ -279,7 +279,3 @@ make seed-image-restore SNO_KUBECONFIG=path/to/target/sno/kubeconfig SEED_IMAGE=
 ```
 
 - Reboot the target host
-
-## Extras
-
-- Set `DHCP` environment variable in order to run with dhcp, default is static ip 
