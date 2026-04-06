@@ -328,12 +328,7 @@ target-oadp-deploy: oadp-deploy
 
 .PHONY: oadp-deploy
 oadp-deploy:
-	$(oc) apply -f oadp-operator.yaml
-	@echo "Waiting for deployment openshift-adp-controller-manager to be available"; \
-	until $(oc) wait deployment -n openshift-adp openshift-adp-controller-manager --for=condition=available=true; do \
-		echo -n .;\
-		sleep 5; \
-	done; echo
+	-$(oc) apply -f oadp-operator.yaml
 
 ## Extra
 .PHONY: lca-logs
