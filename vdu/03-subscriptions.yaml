@@ -1,4 +1,13 @@
 ---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: sriov-network-operators
+  namespace: openshift-sriov-network-operator
+spec:
+  targetNamespaces:
+    - openshift-sriov-network-operator
+---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
@@ -10,15 +19,6 @@ spec:
   name: sriov-network-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
----
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: sriov-network-operators
-  namespace: openshift-sriov-network-operator
-spec:
-  targetNamespaces:
-    - openshift-sriov-network-operator
 
 ---
 apiVersion: operators.coreos.com/v1
@@ -39,28 +39,6 @@ spec:
   channel: stable
   installPlanApproval: Automatic
   name: ptp-operator
-  source: redhat-operators
-  sourceNamespace: openshift-marketplace
-
----
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: cluster-logging
-  namespace: openshift-logging
-spec:
-  targetNamespaces:
-    - openshift-logging
----
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: cluster-logging
-  namespace: openshift-logging
-spec:
-  channel: stable
-  installPlanApproval: Automatic
-  name: cluster-logging
   source: redhat-operators
   sourceNamespace: openshift-marketplace
 

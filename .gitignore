@@ -18,3 +18,4 @@ agent-config-seed.yaml
 agent-config-target.yaml
 agent-config-recipient.yaml
 ipc-workdir/
+CLAUDE.md

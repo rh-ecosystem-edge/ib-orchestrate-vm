@@ -22,12 +22,4 @@ kind: Namespace
 metadata:
   annotations:
     workload.openshift.io/allowed: management
-  name: openshift-logging
-
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  annotations:
-    workload.openshift.io/allowed: management
   name: openshift-local-storage
