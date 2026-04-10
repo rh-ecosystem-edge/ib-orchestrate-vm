@@ -326,9 +326,111 @@ target-directory-varlibcontainers: directory-varlibcontainers
 target-oadp-deploy: CLUSTER=$(TARGET_VM_NAME)
 target-oadp-deploy: oadp-deploy
 
+# OADP FBC (File-Based Catalog) configuration for pre-GA builds
+# Set OADP_FBC_IMAGE to use pre-GA builds instead of official catalog
+# Example: OADP_FBC_IMAGE=quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:oadp-1.6__v4.22__oadp-rhel9-operator
+OADP_FBC_IMAGE ?=
+OADP_ART_PULL_SECRET ?=
+
 .PHONY: oadp-deploy
-oadp-deploy:
-	-$(oc) apply -f oadp-operator.yaml
+oadp-deploy: ## Deploy OADP operator (use OADP_FBC_IMAGE for pre-GA builds)
+ifdef OADP_FBC_IMAGE
+	@echo "Deploying OADP from FBC: $(OADP_FBC_IMAGE)"
+	$(MAKE) oadp-deploy-fbc
+else
+	@echo "Deploying OADP from official catalog"
+	$(MAKE) oadp-deploy-official
+endif
+
+.PHONY: oadp-deploy-official
+oadp-deploy-official:
+	$(oc) apply -f oadp-operator.yaml
+	@echo "Waiting for deployment openshift-adp-controller-manager to be available"; \
+	until $(oc) wait deployment -n openshift-adp openshift-adp-controller-manager --for=condition=available=true --timeout=10m; do \
+		echo -n .;\
+		sleep 5; \
+	done; echo
+
+.PHONY: oadp-deploy-fbc
+oadp-deploy-fbc:
+ifndef OADP_FBC_IMAGE
+	$(error OADP_FBC_IMAGE must be set for FBC deployment. Example: OADP_FBC_IMAGE=quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:oadp-1.6__v4.22__oadp-rhel9-operator)
+endif
+	@echo "Step 1: Creating CatalogSource with FBC image"
+	@OADP_FBC_IMAGE=$(OADP_FBC_IMAGE) envsubst < oadp-operator-fbc.yaml | $(oc) apply -f -
+	@echo "Step 2: Creating art-images-share pull secret (if provided)"
+ifdef OADP_ART_PULL_SECRET
+	$(MAKE) oadp-create-art-secret
+else
+	@echo "WARNING: OADP_ART_PULL_SECRET not set. Set it if images fail to pull from art-images-share"
+	@echo "Get access: https://rover.redhat.com/groups/group/art-images-share"
+endif
+	@echo "Step 3: Applying ImageDigestMirrorSet (IDMS)"
+	@echo "NOTE: IDMS requires MachineConfig update and node reboot"
+	@# Generate a stable IDMS name from the FBC image tag
+	@FBC_HASH=$$(echo "$(OADP_FBC_IMAGE)" | sha256sum | cut -c1-8); \
+	IDMS_NAME="oadp-images-mirror-$$FBC_HASH"; \
+	echo "Using IDMS name: $$IDMS_NAME (based on FBC image)"; \
+	if $(oc) get imagedigestmirrorset "$$IDMS_NAME" 2>/dev/null; then \
+		echo "IDMS $$IDMS_NAME already exists, skipping..."; \
+	else \
+		echo "Creating new IDMS $$IDMS_NAME"; \
+		sed "s/name: oadp-images-mirror-set/name: $$IDMS_NAME/" oadp-idms-template.yaml | $(oc) apply -f -; \
+		echo "Cleaning up old OADP IDMS if any..."; \
+		for old_idms in $$($(oc) get imagedigestmirrorset -o name | grep 'imagedigestmirrorset.config.openshift.io/oadp-images-mirror-' | grep -v "$$IDMS_NAME"); do \
+			echo "Deleting old IDMS: $$old_idms"; \
+			$(oc) delete "$$old_idms" || true; \
+		done; \
+		echo "Waiting for MachineConfigPool to update (this may take several minutes)..."; \
+		until $(oc) wait mcp master --for=condition=updated=true --timeout=20m 2>/dev/null; do \
+			echo -n .; sleep 10; \
+		done; echo; \
+	fi
+	@echo "Step 4: Waiting for OADP operator deployment"
+	@until $(oc) wait deployment -n openshift-adp openshift-adp-controller-manager --for=condition=available=true --timeout=10m 2>/dev/null; do \
+		echo -n .;\
+		sleep 5; \
+	done; echo
+	@echo "OADP FBC deployment complete"
+
+.PHONY: oadp-create-art-secret
+oadp-create-art-secret:
+ifndef OADP_ART_PULL_SECRET
+	$(error OADP_ART_PULL_SECRET must be set. Get access at https://rover.redhat.com/groups/group/art-images-share)
+endif
+	@echo "Creating art-images-share pull secret in openshift-marketplace"
+	@echo '$(OADP_ART_PULL_SECRET)' | $(oc) create secret generic art-images-share-pull-secret \
+		-n openshift-marketplace \
+		--from-file=.dockerconfigjson=/dev/stdin \
+		--type=kubernetes.io/dockerconfigjson \
+		--dry-run=client -o yaml | $(oc) apply -f -
+	@echo "Linking secret to default service account"
+	@$(oc) secrets link default art-images-share-pull-secret -n openshift-marketplace --for=pull || true
+
+.PHONY: oadp-discover-images
+oadp-discover-images: ## Discover images from OADP FBC and generate IDMS (requires opm, jq)
+ifndef OADP_FBC_IMAGE
+	$(error OADP_FBC_IMAGE must be set. Example: OADP_FBC_IMAGE=quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:oadp-1.6__v4.22__oadp-rhel9-operator)
+endif
+	./discover-oadp-images.sh $(OADP_FBC_IMAGE)
+
+.PHONY: oadp-remove
+oadp-remove: ## Remove OADP operator and related resources
+	@echo "Removing OADP subscription and operator"
+	-$(oc) delete subscription openshift-adp -n openshift-adp
+	-$(oc) delete csv -n openshift-adp -l operators.coreos.com/redhat-oadp-operator.openshift-adp
+	-$(oc) delete operatorgroup openshift-adp -n openshift-adp
+	-$(oc) delete namespace openshift-adp
+	-$(oc) delete catalogsource oadp-fbc-catalog -n openshift-marketplace
+	@echo "Removing all OADP IDMS (including versioned ones)"
+	-for idms in $$($(oc) get imagedigestmirrorset -o name | grep 'imagedigestmirrorset.config.openshift.io/oadp-images-mirror-'); do \
+		echo "Deleting $$idms"; \
+		$(oc) delete "$$idms" || true; \
+	done
+	@echo "Removing art-images-share pull secret"
+	-$(oc) secrets unlink default art-images-share-pull-secret -n openshift-marketplace --for=pull 2>/dev/null || true
+	-$(oc) delete secret art-images-share-pull-secret -n openshift-marketplace
+	@echo "OADP removal complete"
 
 ## Extra
 .PHONY: lca-logs
