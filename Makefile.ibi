@@ -138,11 +138,11 @@ ifdef IBI_DHCP
 	echo "Got DHCP IP: $$IBI_LOG_IP" && \
 	echo "Waiting for $(IBI_VM_NAME) to be accessible" && \
 	until ssh $(SSH_FLAGS) core@$$IBI_LOG_IP true 2>/dev/null; do sleep 5; echo -n .; done && echo && \
-	ssh $(SSH_FLAGS) core@$$IBI_LOG_IP "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
+	ssh $(SSH_FLAGS) core@$$IBI_LOG_IP "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished.*SNO Image-based Installation/ { exit }'"
 else
 	@echo "Waiting for $(IBI_VM_NAME) to be accessible"
 	@until ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) true; do sleep 5; echo -n .; done; echo
-	ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished SNO Image-based Installation./ { exit }'"
+	ssh $(SSH_FLAGS) core@$(IBI_VM_IP_$(STACK_PRIMARY_FAM)) "sudo journalctl -flu install-rhcos-and-restore-seed.service | stdbuf -o0 -e0 awk '{print \$$0 } /Finished.*SNO Image-based Installation/ { exit }'"
 endif
 
 .PHONY: image-based-installation-config.yaml
