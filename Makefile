@@ -65,11 +65,24 @@ LIBVIRT_IMAGE_PATH := $(or ${LIBVIRT_IMAGE_PATH},/var/lib/libvirt/images)
 CPU_CORE ?= 16
 RAM_MB ?= 32768
 DISK_GB ?= 140
+
 # use this var to deploy the lifecycle-agent operator from an operator-sdk bundle image
-LCA_OPERATOR_BUNDLE_IMAGE ?= ""
+LCA_OPERATOR_BUNDLE_IMAGE ?=
 LCA_IMAGE ?= quay.io/openshift-kni/lifecycle-agent-operator:latest
 LCA_GIT_REPO ?= https://github.com/openshift-kni/lifecycle-agent
 LCA_GIT_BRANCH ?= main
+
+# CI-only: commit SHA under test (presubmit maps PULL_PULL_SHA from lifecycle-agent).
+CI_LCA_GIT_REF ?=
+# CI-only: upstream PR number; fetch pull/N/head when CI_LCA_GIT_REF is not directly reachable (fork PRs).
+CI_LCA_GIT_PULL ?=
+
+# If CI_LCA_GIT_REF is set, use it to checkout lifecycle-agent, otherwise use LCA_GIT_BRANCH.
+LCA_GIT_RAW_REF = $(or $(CI_LCA_GIT_REF),$(LCA_GIT_BRANCH))
+
+# If CI_LCA_GIT_REF is set, use lifecycle-agent-ci, otherwise use lifecycle-agent.
+LCA_CHECKOUT = $(if $(CI_LCA_GIT_REF),lifecycle-agent-ci,lifecycle-agent)
+
 RELEASE_ARCH ?= x86_64
 DEFAULT_RELEASE_IMAGE ?= quay.io/openshift-release-dev/ocp-release:$(RELEASE_VERSION)-$(RELEASE_ARCH)
 SEED_RELEASE_IMAGE ?= $(DEFAULT_RELEASE_IMAGE)
@@ -141,9 +154,12 @@ bip-orchestrate-vm-apply-patches: bip-orchestrate-vm
 bip-orchestrate-vm-patched: bip-orchestrate-vm-apply-patches
 
 .PHONY: lifecycle-agent
+# Checkout lifecycle-agent from LCA_GIT_BRANCH for local usage
 lifecycle-agent:
 	@if [ -d $@ ]; then \
-		git -C $@ pull && \
+		git -C $@ fetch origin "$(LCA_GIT_BRANCH)" && \
+		git -C $@ checkout "$(LCA_GIT_BRANCH)" && \
+		git -C $@ pull --ff-only origin "$(LCA_GIT_BRANCH)" && \
 		git -C $@ submodule sync --recursive && \
 		git -C $@ submodule update --init --recursive --remote; \
 	else \
@@ -151,6 +167,29 @@ lifecycle-agent:
 		git -C lifecycle-agent submodule sync --recursive && \
 		git -C lifecycle-agent submodule update --init --recursive --remote; \
 	fi
+
+.PHONY: lifecycle-agent-ci
+# Pin lifecycle-agent to CI_LCA_GIT_REF (set CI_LCA_GIT_PULL for fork PRs) for CI usage
+lifecycle-agent-ci:
+	@if [ ! -d lifecycle-agent/.git ]; then \
+		git clone $(LCA_GIT_REPO) lifecycle-agent; \
+	fi
+	@git -C lifecycle-agent fetch origin --tags
+	@test -n "$(CI_LCA_GIT_REF)" || { echo "CI_LCA_GIT_REF must be set" >&2; exit 1; }; \
+	if ! git -C lifecycle-agent cat-file -e "$(CI_LCA_GIT_REF)^{commit}" 2>/dev/null; then \
+		git -C lifecycle-agent fetch origin "$(CI_LCA_GIT_REF)" 2>/dev/null || true; \
+	fi; \
+	if ! git -C lifecycle-agent cat-file -e "$(CI_LCA_GIT_REF)^{commit}" 2>/dev/null; then \
+		test -n "$(CI_LCA_GIT_PULL)" || { echo "CI_LCA_GIT_REF=$(CI_LCA_GIT_REF) not reachable; set CI_LCA_GIT_PULL for fork PRs" >&2; exit 1; }; \
+		git -C lifecycle-agent fetch origin "pull/$(CI_LCA_GIT_PULL)/head:pr-$(CI_LCA_GIT_PULL)"; \
+	fi; \
+	if ! git -C lifecycle-agent checkout "$(CI_LCA_GIT_REF)" 2>/dev/null; then \
+		test -n "$(CI_LCA_GIT_PULL)" || { echo "CI_LCA_GIT_REF=$(CI_LCA_GIT_REF) checkout failed; set CI_LCA_GIT_PULL" >&2; exit 1; }; \
+		git -C lifecycle-agent fetch origin "pull/$(CI_LCA_GIT_PULL)/merge:pr-$(CI_LCA_GIT_PULL)-merge"; \
+		git -C lifecycle-agent checkout "$(CI_LCA_GIT_REF)"; \
+	fi
+	@git -C lifecycle-agent submodule sync --recursive
+	@git -C lifecycle-agent submodule update --init --recursive
 
 ## VM provision in a single step
 .PHONY: seed
@@ -252,7 +291,7 @@ seed-oadp-deploy: oadp-deploy
 
 .PHONY: generate-dnsmasq-site-policy-section.sh
 generate-dnsmasq-site-policy-section.sh:
-	curl -sOL https://raw.githubusercontent.com/$(shell echo $(LCA_GIT_REPO) | awk -F 'github.com/' '{print $$NF}')/$(LCA_GIT_BRANCH)/hack/generate-dnsmasq-site-policy-section.sh
+	curl -fsSLO https://raw.githubusercontent.com/$(shell echo $(LCA_GIT_REPO) | awk -F 'github.com/' '{print $$NF}')/$(LCA_GIT_RAW_REF)/hack/generate-dnsmasq-site-policy-section.sh
 	chmod +x $@
 
 .PHONY: dnsmasq-workaround
@@ -435,11 +474,12 @@ credentials/pull-secret.json:
 	@echo '$(PULL_SECRET)' > credentials/pull-secret.json
 
 .PHONY: lifecycle-agent-deploy
-lifecycle-agent-deploy: lifecycle-agent
+lifecycle-agent-deploy: $(LCA_CHECKOUT)
 	@export KUBECONFIG=$$(realpath $(SNO_KUBECONFIG)); \
-	if [ -n $(LCA_OPERATOR_BUNDLE_IMAGE) ]; then \
+	if [ -n "$(LCA_OPERATOR_BUNDLE_IMAGE)" ]; then \
 		mkdir -p lifecycle-agent/bin; \
 		make -C lifecycle-agent operator-sdk; \
+		echo "lifecycle-agent checkout: $$(git -C lifecycle-agent rev-parse HEAD)"; \
 		BUNDLE_IMG=$(LCA_OPERATOR_BUNDLE_IMAGE) \
 			make -C lifecycle-agent bundle-run ;\
 	else \
