@@ -1,0 +1,47 @@
+---
+# CatalogSource for pre-GA OADP builds using FBC
+# Example: OADP_FBC_IMAGE=quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:oadp-1.6__v4.22__oadp-rhel9-operator
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: oadp-fbc-catalog
+  namespace: openshift-marketplace
+spec:
+  sourceType: grpc
+  image: ${OADP_FBC_IMAGE}
+  displayName: OADP FBC Catalog
+  publisher: Red Hat
+  updateStrategy:
+    registryPoll:
+      interval: 10m
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-adp
+  labels:
+    name: openshift-adp
+
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-adp
+  namespace: openshift-adp
+spec:
+  targetNamespaces:
+  - openshift-adp
+
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-adp
+  namespace: openshift-adp
+spec:
+  installPlanApproval: Automatic
+  approved: true
+  name: redhat-oadp-operator
+  source: oadp-fbc-catalog
+  sourceNamespace: openshift-marketplace
